@@ -21,6 +21,9 @@
 #include "bof2d.h"
 #include <C:\Program Files (x86)\Visual Leak Detector\include\vld.h>
 #include <bofstd/bofsystem.h>
+#include <bofstd/bofenum.h>
+#include <bofstd/bofpath.h>
+#include <bofstd/bofcommandlineparser.h>
 
 extern "C"
 {
@@ -33,14 +36,43 @@ extern "C"
 BEGIN_BOF2D_NAMESPACE()
 constexpr uint32_t MAX_AUDIO_SIZE = (2 * 16 * 4 * 48000);   //2 sec of 16 audio channel containing sample in 32 bit at 480000 (6MB)
 
+enum class BOF2D_AUDIO_FORMAT :int32_t
+{
+  BOF2D_AUDIO_FORMAT_PCM = 0,
+  BOF2D_AUDIO_FORMAT_WAV,
+  BOF2D_AUDIO_FORMAT_MAX
+};
+extern BOF::BofEnum<BOF2D_AUDIO_FORMAT> S_Bof2dAudioFormatEnumConverter;
+//"A_BASEFN=AudioOut;A_NBCHNL=2;A_RATE=48000;A_FMT=WAV"
+struct BOF2D_EXPORT BOF2D_AUDIO_OPTION
+{
+  BOF::BofPath BasePath;
+  uint32_t NbChannel_U32;
+  uint64_t ChannelLayout_U64;
+  uint32_t SampleRateInHz_U32;
+  BOF2D_AUDIO_FORMAT Format_E;
+
+  BOF2D_AUDIO_OPTION()
+  {
+    Reset();
+  }
+
+  void Reset()
+  {
+    BasePath = "";
+    NbChannel_U32 = 0;
+    ChannelLayout_U64 = 0;
+    SampleRateInHz_U32 = 0;
+    Format_E = BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_MAX;
+  }
+};
+
 struct BOF2D_EXPORT BOF2D_AUDIO_DATA
 {
   BOF::BOF_BUFFER Data_X;
   uint32_t NbSample_U32;
-  uint32_t NbChannel_U32;
-  uint64_t ChannelLayout_U64;
-  uint32_t SampleRateInHz_U32;
-  // _pOutAudioFrame_X->format  _pOutAudioFrame_X->pkt_pos, _pOutAudioFrame_X->pkt_duration, _pOutAudioFrame_X->pkt_size);
+
+  BOF2D_AUDIO_OPTION Param_X;
 
   BOF2D_AUDIO_DATA()
   {
@@ -51,9 +83,7 @@ struct BOF2D_EXPORT BOF2D_AUDIO_DATA
   {
     Data_X.Reset();
     NbSample_U32 = 0;
-    NbChannel_U32 = 0;
-    ChannelLayout_U64 = 0;
-    SampleRateInHz_U32 = 0;
+    Param_X.Reset();
   }
 };
 class BOF2D_EXPORT Bof2dAudioDecoder
@@ -62,16 +92,20 @@ public:
   Bof2dAudioDecoder();
   virtual ~Bof2dAudioDecoder();
 
-  BOFERR Open(const std::string &_rInputFile_S);
+  BOFERR Open(const std::string &_rInputFile_S, const std::string &_rOption_S);
   BOFERR BeginRead(BOF2D_AUDIO_DATA &_rAudioData_X);
   BOFERR EndRead();
   BOFERR Close();
   bool IsAudioStreamPresent();
 
 private:
+  //BOFERR ParseOption(const std::string &_rOption_S);
   BOFERR ConvertAudio(bool _Flush_B, AVFrame *_pInAudioFrame_X, AVFrame *_pOutAudioFrame_X, uint32_t _OutNbAudioChannel_U32, uint32_t _OutAudioChannelLayout_U32, uint32_t _OutAudioSampleRateInHz_U32, enum AVSampleFormat _OutAudioSampleFmt_E);
 
   std::atomic<bool> mReadBusy_B = false;
+  std::vector<BOF::BOFPARAMETER> mAudioOptionParam_X;
+  BOF2D_AUDIO_OPTION mAudioOption_X;
+
   AVPacket mPacket_X;
   AVFormatContext *mpAudioFormatCtx_X = nullptr;
   int mAudioStreamIndex_i = -1;

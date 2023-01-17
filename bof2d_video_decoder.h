@@ -55,7 +55,7 @@ public:
   Bof2dVideoDecoder();
   virtual ~Bof2dVideoDecoder();
 
-  BOFERR Open(const std::string &_rInputFile_S);
+  BOFERR Open(const std::string &_rInputFile_S, const std::string &_rOption_S);
   BOFERR BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X);
   BOFERR EndRead();
   BOFERR Close();

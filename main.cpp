@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
 	BOFERR Sts_E;
 	int16_t *pData_S16;
 	BOF2D::Bof2dAvCodec AvCodec;
-	Sts_E = AvCodec.Open("C:/tmp/sample-mp4-file.mp4");
+	Sts_E = AvCodec.Open("C:/tmp/sample-mp4-file.mp4", "--A_BASEFN=AudioOut;--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_FMT=WAV");
 //	Sts_E = AvCodec.Open("C:\\tmp\\sample-15s.mp3");
 	//goto l;
 	do
@@ -27,9 +27,9 @@ int main(int argc, char *argv[])
 		if (Sts_E == BOF_ERR_NO_ERROR)
 		{
 			pData_S16 = (int16_t *)AudioData_X.Data_X.pData_U8;
-			printf("Audio %zx:%p nbs %d ch %d layout %zx Rate %d\n", AudioData_X.Data_X.Size_U64, AudioData_X.Data_X.pData_U8,
-				AudioData_X.NbSample_U32, AudioData_X.NbChannel_U32, AudioData_X.ChannelLayout_U64, AudioData_X.SampleRateInHz_U32);
-			printf("Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pData_S16[0], pData_S16[1], pData_S16[2], pData_S16[3], pData_S16[4], pData_S16[5], pData_S16[6], pData_S16[7]);
+			printf("Got Audio %zx:%p nbs %d ch %d layout %zx Rate %d\n", AudioData_X.Data_X.Size_U64, AudioData_X.Data_X.pData_U8,
+				AudioData_X.NbSample_U32, AudioData_X.Param_X.NbChannel_U32, AudioData_X.Param_X.ChannelLayout_U64, AudioData_X.Param_X.SampleRateInHz_U32);
+			printf("Got Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pData_S16[0], pData_S16[1], pData_S16[2], pData_S16[3], pData_S16[4], pData_S16[5], pData_S16[6], pData_S16[7]);
 
 			Sts_E = AvCodec.EndRead();
 		}

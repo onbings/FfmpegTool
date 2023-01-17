@@ -22,9 +22,9 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{5c79cea5-e127-4921-aa82-f05a98964879}</ProjectGuid>
-    <RootNamespace>ffmpeg</RootNamespace>
+    <RootNamespace>FfmpegTool</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>ffmpeg</ProjectName>
+    <ProjectName>FfmpegTool</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -75,12 +75,12 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>C:\bld\FfmpegTool\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>C:\bld\FfmpegTool\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>C:\bld\FfmpegTool\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>C:\bld\FfmpegTool\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

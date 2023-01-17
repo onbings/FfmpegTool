@@ -49,7 +49,7 @@ public:
   Bof2dAvCodec(int _LogLevel_i = AV_LOG_ERROR);
   virtual ~Bof2dAvCodec();
 
-  BOFERR Open(const std::string &_rInputFile_S);
+  BOFERR Open(const std::string &_rInputFile_S, const std::string &_rOption_S);
   BOFERR BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X, BOF2D_AUDIO_DATA &_rAudioData_X);
   BOFERR EndRead();
   BOFERR Close();

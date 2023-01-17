@@ -43,13 +43,13 @@ Bof2dAvCodec::~Bof2dAvCodec()
   mpuAudioDecoder->Close();
   mpuVideoDecoder->Close();
 }
-BOFERR Bof2dAvCodec::Open(const std::string &_rInputFile_S)
+BOFERR Bof2dAvCodec::Open(const std::string &_rInputFile_S, const std::string &_rOption_S)
 {
   BOFERR Rts_E = BOF_ERR_NO_ERROR, StsVideo_E, StsAudio_E;
 
-  StsVideo_E = mpuVideoDecoder->Open(_rInputFile_S);
+  StsVideo_E = mpuVideoDecoder->Open(_rInputFile_S, _rOption_S);
 
-  StsAudio_E = mpuAudioDecoder->Open(_rInputFile_S);
+  StsAudio_E = mpuAudioDecoder->Open(_rInputFile_S, _rOption_S);
   
   if ((StsVideo_E != BOF_ERR_NO_ERROR) && (mpuVideoDecoder->IsVideoStreamPresent()))
   {

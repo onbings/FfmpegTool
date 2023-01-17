@@ -30,7 +30,7 @@ Bof2dVideoDecoder::~Bof2dVideoDecoder()
   Close();
 }
 
-BOFERR Bof2dVideoDecoder::Open(const std::string &_rInputFile_S)
+BOFERR Bof2dVideoDecoder::Open(const std::string &_rInputFile_S, const std::string &_rOption_S)
 {
   BOFERR    Rts_E;
   int       Sts_i;
