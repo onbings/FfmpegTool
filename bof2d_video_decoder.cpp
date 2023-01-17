@@ -154,6 +154,7 @@ BOFERR Bof2dVideoDecoder::Open(const std::string &_rInputFile_S)
       printf("Convert from %s %s to %s %dx%d\n", av_get_pix_fmt_name(mpVideoCodecCtx_X->pix_fmt), av_color_space_name(mpVideoCodecCtx_X->colorspace),
         av_get_pix_fmt_name(mRgbVideoPixFmt_E), mpVideoCodecParam_X->width, mpVideoCodecParam_X->height);
 
+      //TODO a remplacer par sws_getContext !!!
       // sws_getCachedContext(nullptr:  If context is NULL, just calls sws_getContext()
       mpVideoSwsImageCtx_X = sws_getCachedContext(nullptr, mpVideoCodecCtx_X->width, mpVideoCodecCtx_X->height, mpVideoCodecCtx_X->pix_fmt, mpVideoCodecParam_X->width, mpVideoCodecParam_X->height, mRgbVideoPixFmt_E, SWS_BICUBIC, nullptr, nullptr, nullptr);
 
@@ -286,16 +287,45 @@ BOFERR Bof2dVideoDecoder::Open(const std::string &_rInputFile_S)
 
   return Rts_E;
 }
-BOFERR Bof2dVideoDecoder::Read(AVFrame **_ppVideoData_X)
+BOFERR Bof2dVideoDecoder::BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X)
 {
-  BOFERR Rts_E = BOF_ERR_EINVAL;
+  BOFERR Rts_E = BOF_ERR_EOF;
 
-  if (_ppVideoData_X)
+  _rVideoData_X.Reset();
+  if (IsVideoStreamPresent())
   {
-    Rts_E = BOF_ERR_NO_ERROR;
+    if (mReadBusy_B)
+    {
+      Rts_E = BOF_ERR_EBUSY;
+    }
+    else
+    {
+      mReadBusy_B = true;
+      Rts_E = BOF_ERR_NO_ERROR;
+    }
   }
   return Rts_E;
 }
+
+BOFERR Bof2dVideoDecoder::EndRead()
+{
+  BOFERR Rts_E = BOF_ERR_EOF;
+
+  if (IsVideoStreamPresent())
+  {
+    if (mReadBusy_B)
+    {
+      mReadBusy_B = false;
+      Rts_E = BOF_ERR_NO_ERROR;
+    }
+    else
+    {
+      Rts_E = BOF_ERR_PENDING;
+    }
+  }
+  return Rts_E;
+}
+
 BOFERR Bof2dVideoDecoder::Close()
 {
   BOFERR Rts_E;

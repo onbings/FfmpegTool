@@ -41,6 +41,8 @@ BEGIN_BOF2D_NAMESPACE()
 void Bof2d_FfmpegLogCallback(void *_pAvcl, int _Level_i, const char *_pFormat_c, va_list _VaList);
 BOFERR Bof2d_FfmpegCheckIfError(int _FfmpegErrorCode_i, const std::string &_rErrorContext_S, const std::string &_rFile_S, const std::string &_rFunction_S, uint32_t _Line_U32);
 
+
+
 class BOF2D_EXPORT Bof2dAvCodec
 {
 public:
@@ -48,7 +50,8 @@ public:
   virtual ~Bof2dAvCodec();
 
   BOFERR Open(const std::string &_rInputFile_S);
-  BOFERR Read(AVFrame **_ppVideoData_X, AVFrame **_ppAudioData_X);
+  BOFERR BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X, BOF2D_AUDIO_DATA &_rAudioData_X);
+  BOFERR EndRead();
   BOFERR Close();
 
 private:

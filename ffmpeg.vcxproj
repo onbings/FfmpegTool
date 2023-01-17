@@ -22,7 +22,7 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{5c79cea5-e127-4921-aa82-f05a98964879}</ProjectGuid>
-    <RootNamespace>FfmpegDecoder</RootNamespace>
+    <RootNamespace>ffmpeg</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ProjectName>ffmpeg</ProjectName>
   </PropertyGroup>
@@ -76,9 +76,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>C:\bld\ffmpeg\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -151,8 +153,10 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bof2d.h" />
     <ClInclude Include="bof2d_audio_decoder.h" />
     <ClInclude Include="bof2d_av_codec.h" />
+    <ClInclude Include="bof2d_export.h" />
     <ClInclude Include="bof2d_video_decoder.h" />
     <ClInclude Include="FfmpegDecoder.h" />
   </ItemGroup>

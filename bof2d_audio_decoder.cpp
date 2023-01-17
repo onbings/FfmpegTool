@@ -281,67 +281,101 @@ void avformat_close_input2(AVFormatContext **ps)
   avio_close2(pb);
 }
 #endif
-BOFERR Bof2dAudioDecoder::Read(AVFrame **_ppAudioData_X)
+BOFERR Bof2dAudioDecoder::BeginRead(BOF2D_AUDIO_DATA &_rAudioData_X)
 {
-  BOFERR Rts_E = BOF_ERR_EINVAL;
+  BOFERR Rts_E = BOF_ERR_EOF;
   int Sts_i;
 
-  if (_ppAudioData_X)
+  _rAudioData_X.Reset();
+  if (IsAudioStreamPresent())
   {
-    Rts_E = BOF_ERR_NO_ERROR;
-    while (Rts_E == BOF_ERR_NO_ERROR)
+    if (mReadBusy_B)
     {
-      Sts_i = av_read_frame(mpAudioFormatCtx_X, &mPacket_X);
-      FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_send_packet Audio", Rts_E);
-      if (Rts_E == BOF_ERR_NO_ERROR)
+      Rts_E = BOF_ERR_EBUSY;
+    }
+    else
+    {
+      mReadBusy_B = true;
+      Rts_E = BOF_ERR_NO_ERROR;
+      while (Rts_E == BOF_ERR_NO_ERROR)
       {
-        if (mPacket_X.stream_index == mAudioStreamIndex_i)
+        Sts_i = av_read_frame(mpAudioFormatCtx_X, &mPacket_X);
+        FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_send_packet Audio", Rts_E);
+        if (Rts_E == BOF_ERR_NO_ERROR)
         {
-          Sts_i = avcodec_send_packet(mpAudioCodecCtx_X, &mPacket_X);
-          FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_send_packet Audio", Rts_E);
-
-          if (Rts_E == BOF_ERR_NO_ERROR)
+          if (mPacket_X.stream_index == mAudioStreamIndex_i)
           {
-            mNbAudioPacketSent_U64++;
-            Sts_i = avcodec_receive_frame(mpAudioCodecCtx_X, mpAudioFrame_X);
-            FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_receive_frame Audio", Rts_E);
+            Sts_i = avcodec_send_packet(mpAudioCodecCtx_X, &mPacket_X);
+            FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_send_packet Audio", Rts_E);
+
             if (Rts_E == BOF_ERR_NO_ERROR)
             {
-              mNbAudioFrameReceived_U64++;
-              printf("AudioFrame Snt/Rcv %zd/%zd Pts %zd Fmt %s NbSmp %d Rate %d Buf %x:%p Layout %zx\n", mNbAudioPacketSent_U64, mNbAudioFrameReceived_U64, mpAudioFrame_X->pts, av_get_sample_fmt_name((AVSampleFormat)mpAudioFrame_X->format),
-                mpAudioFrame_X->nb_samples, mpAudioFrame_X->sample_rate, mpAudioFrame_X->linesize[0], mpAudioFrame_X->data[0],
-                mpAudioFrame_X->channel_layout);
-
-              //continuer leak ici 
-              //!! break dans main fct
-              //! 
-              //Rts_E = ConvertAudio(false, mpAudioFrame_X, mpAudioFrameConverted_X,  WAVE_OUT_NB_CHANNEL, (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, WAVE_SAMPLE_RATE, AV_SAMPLE_FMT_S16);
-             Rts_E = BOF_ERR_ADDRESS;
-
+              mNbAudioPacketSent_U64++;
+              Sts_i = avcodec_receive_frame(mpAudioCodecCtx_X, mpAudioFrame_X);
+              FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_receive_frame Audio", Rts_E);
               if (Rts_E == BOF_ERR_NO_ERROR)
               {
-                *_ppAudioData_X = mpAudioFrameConverted_X;
+                mNbAudioFrameReceived_U64++;
+                printf("AudioFrame Snt/Rcv %zd/%zd Pts %zd Fmt %s NbSmp %d Rate %d Buf %x:%p Layout %zx\n", mNbAudioPacketSent_U64, mNbAudioFrameReceived_U64, mpAudioFrame_X->pts, av_get_sample_fmt_name((AVSampleFormat)mpAudioFrame_X->format),
+                  mpAudioFrame_X->nb_samples, mpAudioFrame_X->sample_rate, mpAudioFrame_X->linesize[0], mpAudioFrame_X->data[0],
+                  mpAudioFrame_X->channel_layout);
+
+                //continuer leak ici 
+                //!! break dans main fct
+                //! 
+                Rts_E = ConvertAudio(false, mpAudioFrame_X, mpAudioFrameConverted_X,  WAVE_OUT_NB_CHANNEL, (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, WAVE_SAMPLE_RATE, AV_SAMPLE_FMT_S16);
+                //Rts_E = BOF_ERR_ADDRESS;
+
+                if (Rts_E == BOF_ERR_NO_ERROR)
+                {
+                  _rAudioData_X.Data_X.SetStorage(mpAudioFrameConverted_X->linesize[0], mpAudioFrameConverted_X->linesize[0], mpAudioFrameConverted_X->data[0]);
+                  _rAudioData_X.NbSample_U32 = mpAudioFrameConverted_X->nb_samples;
+                  _rAudioData_X.NbChannel_U32 = mpAudioFrameConverted_X->channels;
+                  _rAudioData_X.ChannelLayout_U64 = mpAudioFrameConverted_X->channel_layout;
+                  _rAudioData_X.SampleRateInHz_U32 = mpAudioFrameConverted_X->sample_rate;
+                }
+                av_packet_unref(&mPacket_X);
+                break;  //leave while so av_packet_unref(&mPacket_X);
               }
-              av_frame_unref(mpAudioFrame_X);
-              av_packet_unref(&mPacket_X);
-              break;  //leave while so av_packet_unref(&mPacket_X);
             }
           }
+          av_packet_unref(&mPacket_X);  //Made in while
         }
-        av_packet_unref(&mPacket_X);  //Made in while
       }
     }
   }
   return Rts_E;
 }
 
-BOFERR Bof2dAudioDecoder::ConvertAudio(bool _Flush_B, AVFrame *_pInAudioFrame_X, AVFrame *_pOutAudioFrame_X, uint32_t _OutNbAudioChannel_U32, uint32_t _OutAudioChannelLayout_U32, uint32_t _OutAudioSampleRateInHz_U32,  enum AVSampleFormat _OutAudioSampleFmt_E)
+
+BOFERR Bof2dAudioDecoder::EndRead()
+{
+  BOFERR Rts_E = BOF_ERR_EOF;
+
+  if (IsAudioStreamPresent())
+  {
+    if (mReadBusy_B)
+    {
+      av_frame_unref(mpAudioFrame_X);
+
+      mReadBusy_B = false;
+      Rts_E = BOF_ERR_NO_ERROR;
+    }
+    else
+    {
+      Rts_E = BOF_ERR_PENDING;
+    }
+  }
+  return Rts_E;
+}
+
+BOFERR Bof2dAudioDecoder::ConvertAudio(bool _Flush_B, AVFrame *_pInAudioFrame_X, AVFrame *_pOutAudioFrameConverted_X, uint32_t _OutNbAudioChannel_U32, uint32_t _OutAudioChannelLayout_U32, uint32_t _OutAudioSampleRateInHz_U32,  enum AVSampleFormat _OutAudioSampleFmt_E)
 {
   BOFERR Rts_E = BOF_ERR_EINVAL;
   uint32_t NbAudioSample_U32, AudioBufferSize_U32, AudioConvertSizePerChannelInSample_U32;
   int64_t AudioDelay_S64;
 
-  if ((_pInAudioFrame_X) && (_pOutAudioFrame_X) && (_pInAudioFrame_X->nb_samples))
+  if ((_pInAudioFrame_X) && (_pOutAudioFrameConverted_X) && (_pInAudioFrame_X->nb_samples))
   {
     AudioDelay_S64 = swr_get_delay(mpAudioSwrCtx_X, mpAudioCodecCtx_X->sample_rate);
     NbAudioSample_U32 = (int)av_rescale_rnd(AudioDelay_S64 + _pInAudioFrame_X->nb_samples, _OutAudioSampleRateInHz_U32, mpAudioCodecCtx_X->sample_rate, AV_ROUND_UP);
@@ -351,7 +385,7 @@ BOFERR Bof2dAudioDecoder::ConvertAudio(bool _Flush_B, AVFrame *_pInAudioFrame_X,
     BOF_ASSERT(AudioBufferSize_U32 <= MAX_AUDIO_SIZE);
     memset(mpAudioBuffer_U8, 0, AudioBufferSize_U32);
     Rts_E = BOF_ERR_NO_ERROR;
-    av_samples_fill_arrays(_pOutAudioFrame_X->data, _pOutAudioFrame_X->linesize, mpAudioBuffer_U8, _OutNbAudioChannel_U32, NbAudioSample_U32, _OutAudioSampleFmt_E, 0);
+    av_samples_fill_arrays(_pOutAudioFrameConverted_X->data, _pOutAudioFrameConverted_X->linesize, mpAudioBuffer_U8, _OutNbAudioChannel_U32, NbAudioSample_U32, _OutAudioSampleFmt_E, 0);
     //int sz = NbAudioSample_U32 * sizeof(int16_t) * _OutNbAudioChannel_U32;
     /*
       * !flush is used to check if we are flushing any remaining
@@ -359,19 +393,19 @@ BOFERR Bof2dAudioDecoder::ConvertAudio(bool _Flush_B, AVFrame *_pInAudioFrame_X,
       */
     AudioConvertSizePerChannelInSample_U32 = swr_convert(mpAudioSwrCtx_X, &mpAudioBuffer_U8, NbAudioSample_U32, _Flush_B ? nullptr : (const uint8_t **)_pInAudioFrame_X->data, _Flush_B ? 0 : _pInAudioFrame_X->nb_samples);
 
-    _pOutAudioFrame_X->nb_samples = AudioConvertSizePerChannelInSample_U32;
-    _pOutAudioFrame_X->channels = _OutNbAudioChannel_U32;
-    _pOutAudioFrame_X->channel_layout = _OutAudioChannelLayout_U32; // (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO
-    _pOutAudioFrame_X->format = _OutAudioSampleFmt_E;
-    _pOutAudioFrame_X->sample_rate = _OutAudioSampleRateInHz_U32;
-    _pOutAudioFrame_X->pkt_pos = _pInAudioFrame_X->pkt_pos;
-    _pOutAudioFrame_X->pkt_duration = _pInAudioFrame_X->pkt_duration;
-    _pOutAudioFrame_X->pkt_size = _pInAudioFrame_X->pkt_size;
+    _pOutAudioFrameConverted_X->nb_samples = AudioConvertSizePerChannelInSample_U32;
+    _pOutAudioFrameConverted_X->channels = _OutNbAudioChannel_U32;
+    _pOutAudioFrameConverted_X->channel_layout = _OutAudioChannelLayout_U32; // (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO
+    _pOutAudioFrameConverted_X->format = _OutAudioSampleFmt_E;
+    _pOutAudioFrameConverted_X->sample_rate = _OutAudioSampleRateInHz_U32;
+    _pOutAudioFrameConverted_X->pkt_pos = _pInAudioFrame_X->pkt_pos;
+    _pOutAudioFrameConverted_X->pkt_duration = _pInAudioFrame_X->pkt_duration;
+    _pOutAudioFrameConverted_X->pkt_size = _pInAudioFrame_X->pkt_size;
      
-    int16_t *pData_S16 = (int16_t *)_pOutAudioFrame_X->data[0];
-    printf("Audio %x:%p nbs %d ch %d layout %zx Fmt %d Rate %d Pos %zd Dur %zd Sz %d\n", _pOutAudioFrame_X->linesize[0], _pOutAudioFrame_X->data[0],
-      _pOutAudioFrame_X->nb_samples, _pOutAudioFrame_X->channels, _pOutAudioFrame_X->channel_layout, _pOutAudioFrame_X->format, _pOutAudioFrame_X->sample_rate,  
-      _pOutAudioFrame_X->pkt_pos, _pOutAudioFrame_X->pkt_duration, _pOutAudioFrame_X->pkt_size);
+    int16_t *pData_S16 = (int16_t *)_pOutAudioFrameConverted_X->data[0];
+    printf("Audio %x:%p nbs %d ch %d layout %zx Fmt %d Rate %d Pos %zd Dur %zd Sz %d\n", _pOutAudioFrameConverted_X->linesize[0], _pOutAudioFrameConverted_X->data[0],
+      _pOutAudioFrameConverted_X->nb_samples, _pOutAudioFrameConverted_X->channels, _pOutAudioFrameConverted_X->channel_layout, _pOutAudioFrameConverted_X->format, _pOutAudioFrameConverted_X->sample_rate,  
+      _pOutAudioFrameConverted_X->pkt_pos, _pOutAudioFrameConverted_X->pkt_duration, _pOutAudioFrameConverted_X->pkt_size);
     printf("Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pData_S16[0], pData_S16[1], pData_S16[2], pData_S16[3], pData_S16[4], pData_S16[5], pData_S16[6], pData_S16[7]);
   }
   return Rts_E;
@@ -403,15 +437,26 @@ else
 BOFERR Bof2dAudioDecoder::Close()
 {
   BOFERR Rts_E;
-
+  bool AudioBufferHasBeenFreeed_B = false;
 //  avio_context_free(&mpAudioAvioCtx_X);
-  av_freep(&mpAudioBuffer_U8);
 
   swr_free(&mpAudioSwrCtx_X);
   if (mpAudioFrame_X)
   {
+    //If we have used mpAudioBuffer_U8 via the Begin/EndRead method we check that here that buffer in mpAudioFrameConverted_X
+    //is the same than mpAudioBuffer_U8. In this case we do not call av_freep(&mpAudioBuffer_U8); and set mpAudioBuffer_U8 to nullptr
+    if (mpAudioFrameConverted_X->data[0] == mpAudioBuffer_U8)
+    {
+      mpAudioBuffer_U8 = nullptr;
+      AudioBufferHasBeenFreeed_B = true;  //Done by av_freep(&mpAudioFrame_X->data[0]); just below
+    }
     av_freep(&mpAudioFrame_X->data[0]);
     av_frame_free(&mpAudioFrame_X);
+  }
+  if (!AudioBufferHasBeenFreeed_B)
+  {
+//If we just open/close decoder without calling read we need to free mpAudioBuffer_U8 here
+    av_freep(&mpAudioBuffer_U8);
   }
   if (mpAudioFrameConverted_X)
   {
@@ -419,7 +464,7 @@ BOFERR Bof2dAudioDecoder::Close()
     av_frame_free(&mpAudioFrameConverted_X);
   }
   //avcodec_close: Do not use this function. Use avcodec_free_context() to destroy a codec context(either open or closed)
-  avcodec_close(mpAudioCodecCtx_X);
+  //avcodec_close(mpAudioCodecCtx_X);
   avcodec_free_context(&mpAudioCodecCtx_X);
   
   avformat_close_input(&mpAudioFormatCtx_X);

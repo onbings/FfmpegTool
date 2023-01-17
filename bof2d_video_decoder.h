@@ -21,6 +21,8 @@
 #include "bof2d.h"
 #include <C:\Program Files (x86)\Visual Leak Detector\include\vld.h>
 
+#include <bofstd/bofsystem.h>
+
 extern "C"
 {
 #include <libavcodec/avcodec.h>
@@ -31,7 +33,22 @@ extern "C"
 }
 
 BEGIN_BOF2D_NAMESPACE()
+struct BOF2D_EXPORT BOF2D_VIDEO_DATA
+{
+  BOF::BOF_BUFFER Data_X;
+  BOF2D::BOF_SIZE Size_X;
 
+  BOF2D_VIDEO_DATA()
+  {
+    Reset();
+  }
+
+  void Reset()
+  {
+    Data_X.Reset();
+    Size_X.Reset();
+  }
+};
 class BOF2D_EXPORT Bof2dVideoDecoder
 {
 public:
@@ -39,11 +56,13 @@ public:
   virtual ~Bof2dVideoDecoder();
 
   BOFERR Open(const std::string &_rInputFile_S);
-  BOFERR Read(AVFrame **_ppVideoData_X);
+  BOFERR BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X);
+  BOFERR EndRead();
   BOFERR Close();
   bool IsVideoStreamPresent();
 
 private:
+  std::atomic<bool> mReadBusy_B = false;
   std::string mOutputCodec_S;
   AVFormatContext *mpVideoFormatCtx_X = nullptr;
   int mVideoStreamIndex_i = -1;

@@ -61,23 +61,28 @@ BOFERR Bof2dAvCodec::Open(const std::string &_rInputFile_S)
   }
   return Rts_E;
 }
-BOFERR Bof2dAvCodec::Read(AVFrame **_ppVideoData_X, AVFrame **_ppAudioData_X)
+BOFERR Bof2dAvCodec::BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X, BOF2D_AUDIO_DATA &_rAudioData_X)
 {
   BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
 
-  if (_ppVideoData_X)
-  {
-    *_ppVideoData_X = nullptr;
-    StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent()) ? mpuVideoDecoder->Read(_ppVideoData_X): BOF_ERR_NO_ERROR;
-  }
-  if (_ppAudioData_X)
-  {
-    *_ppAudioData_X = nullptr;
-    StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent()) ? mpuAudioDecoder->Read(_ppAudioData_X) : BOF_ERR_NO_ERROR;
-  }
+  _rVideoData_X.Reset();
+  StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent()) ? mpuVideoDecoder->BeginRead(_rVideoData_X): BOF_ERR_NO_ERROR;
+  
+  _rAudioData_X.Reset();
+  StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent()) ? mpuAudioDecoder->BeginRead(_rAudioData_X) : BOF_ERR_NO_ERROR;
+  
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E: StsVideo_E;
 }
+BOFERR Bof2dAvCodec::EndRead()
+{
+  BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
 
+  StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent()) ? mpuVideoDecoder->EndRead() : BOF_ERR_NO_ERROR;
+
+  StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent()) ? mpuAudioDecoder->EndRead() : BOF_ERR_NO_ERROR;
+
+  return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
+}
 BOFERR Bof2dAvCodec::Close()
 {
   BOFERR Rts_E;

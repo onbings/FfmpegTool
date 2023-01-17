@@ -33,6 +33,29 @@ extern "C"
 BEGIN_BOF2D_NAMESPACE()
 constexpr uint32_t MAX_AUDIO_SIZE = (2 * 16 * 4 * 48000);   //2 sec of 16 audio channel containing sample in 32 bit at 480000 (6MB)
 
+struct BOF2D_EXPORT BOF2D_AUDIO_DATA
+{
+  BOF::BOF_BUFFER Data_X;
+  uint32_t NbSample_U32;
+  uint32_t NbChannel_U32;
+  uint64_t ChannelLayout_U64;
+  uint32_t SampleRateInHz_U32;
+  // _pOutAudioFrame_X->format  _pOutAudioFrame_X->pkt_pos, _pOutAudioFrame_X->pkt_duration, _pOutAudioFrame_X->pkt_size);
+
+  BOF2D_AUDIO_DATA()
+  {
+    Reset();
+  }
+
+  void Reset()
+  {
+    Data_X.Reset();
+    NbSample_U32 = 0;
+    NbChannel_U32 = 0;
+    ChannelLayout_U64 = 0;
+    SampleRateInHz_U32 = 0;
+  }
+};
 class BOF2D_EXPORT Bof2dAudioDecoder
 {
 public:
@@ -40,13 +63,15 @@ public:
   virtual ~Bof2dAudioDecoder();
 
   BOFERR Open(const std::string &_rInputFile_S);
-  BOFERR Read(AVFrame **_ppAudioData_X);
+  BOFERR BeginRead(BOF2D_AUDIO_DATA &_rAudioData_X);
+  BOFERR EndRead();
   BOFERR Close();
   bool IsAudioStreamPresent();
 
 private:
   BOFERR ConvertAudio(bool _Flush_B, AVFrame *_pInAudioFrame_X, AVFrame *_pOutAudioFrame_X, uint32_t _OutNbAudioChannel_U32, uint32_t _OutAudioChannelLayout_U32, uint32_t _OutAudioSampleRateInHz_U32, enum AVSampleFormat _OutAudioSampleFmt_E);
 
+  std::atomic<bool> mReadBusy_B = false;
   AVPacket mPacket_X;
   AVFormatContext *mpAudioFormatCtx_X = nullptr;
   int mAudioStreamIndex_i = -1;

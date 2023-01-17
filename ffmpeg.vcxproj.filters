@@ -44,5 +44,11 @@
     <ClInclude Include="bof2d_av_codec.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="bof2d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bof2d_export.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
