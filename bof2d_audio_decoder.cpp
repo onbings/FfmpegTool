@@ -312,8 +312,8 @@ BOFERR Bof2dAudioDecoder::Read(AVFrame **_ppAudioData_X)
                 mpAudioFrame_X->nb_samples, mpAudioFrame_X->sample_rate, mpAudioFrame_X->linesize[0], mpAudioFrame_X->data[0],
                 mpAudioFrame_X->channel_layout);
 
-              continuer leak ici 
-              !! break dans main fct
+              //continuer leak ici 
+              //!! break dans main fct
               //! 
               //Rts_E = ConvertAudio(false, mpAudioFrame_X, mpAudioFrameConverted_X,  WAVE_OUT_NB_CHANNEL, (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, WAVE_SAMPLE_RATE, AV_SAMPLE_FMT_S16);
              Rts_E = BOF_ERR_ADDRESS;
