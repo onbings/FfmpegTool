@@ -50,6 +50,7 @@ struct BOF2D_EXPORT BOF2D_AUDIO_OPTION
 {
   BOF::BofPath BasePath;
   bool SaveChunk_B;
+  bool SpitInChannel_B;
   uint32_t NbChannel_U32;
   uint64_t ChannelLayout_U64;
   uint32_t SampleRateInHz_U32;
@@ -65,6 +66,7 @@ struct BOF2D_EXPORT BOF2D_AUDIO_OPTION
   {
     BasePath = "";
     SaveChunk_B = false;
+    SpitInChannel_B = false;
     NbChannel_U32 = 0;
     ChannelLayout_U64 = 0;
     SampleRateInHz_U32 = 0;
@@ -92,6 +94,21 @@ struct BOF2D_EXPORT BOF2D_AUDIO_DATA
     Param_X.Reset();
   }
 };
+struct BOF2D_AUDIO_OUT_FILE
+{
+  uint64_t Size_U64;
+  intptr_t Io;
+  BOF2D_AUDIO_OUT_FILE()
+  {
+    Reset();
+  }
+  void Reset()
+  {
+    Size_U64 = 0;
+    Io = BOF::BOF_FS_INVALID_HANDLE;
+  }
+};
+
 class BOF2D_EXPORT Bof2dAudioDecoder
 {
 public:
@@ -105,16 +122,16 @@ public:
   bool IsAudioStreamPresent();
 
 private:
-  BOFERR WriteHeader(uint64_t _Size_U64);
-  BOFERR CreateHeader();
-  BOFERR WriteChunk(uint32_t _ChunkSizeInByte_U32);
-  BOFERR CloseHeader();
+  BOFERR WriteHeader(const BOF2D_AUDIO_OUT_FILE &_rOutFile_X);
+  BOFERR CreateFileOut();
+  BOFERR WriteChunkOut(uint32_t _ChunkSizeInByte_U32);
+  BOFERR CloseFileOut();
   BOFERR ConvertAudio(uint32_t &_rTotalSizeOfAudioConverted_U32);
 
   std::atomic<bool> mReadBusy_B = false;
   std::vector<BOF::BOFPARAMETER> mAudioOptionParam_X;
   BOF2D_AUDIO_OPTION mAudioOption_X;
-  intptr_t mOutAudioFile = BOF::BOF_FS_INVALID_HANDLE;
+  std::vector<BOF2D_AUDIO_OUT_FILE> mAudioOutFileCollection;
 
   AVPacket mPacket_X;
   AVFormatContext *mpAudioFormatCtx_X = nullptr;
