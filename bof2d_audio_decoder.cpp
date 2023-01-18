@@ -20,13 +20,22 @@
 #include "bof2d_av_codec.h"
 
 #include <bofstd/bofstring.h>
-
-#define WAVE_OUT_NB_CHANNEL  2
-#define WAVE_SAMPLE_RATE  48000	//      16000	//desired sample rate of the output WAVE audio.
-#define AVIO_CTX_BUF_SZ          4096	//definition of the WAVE header, there is plenty of documentation on this, so nothing more will be said
-
+#include <bofstd/bofstringformatter.h>
+//https://www.jensign.com/multichannel/multichannelformat.html
+/*Sample24 bit96kHz5.1.wav
+----- Sample 24 bit/ 96 kHz 5.1 Multichannel WAV File -------
+Here is a simple 6 channel 24 bit/ 96 kHz multi-tone multichannel wav file.
+   wav5196.wav (8.23 MB)
+The file was synthesized programatically using a C# application (to be posted). The wav amplitude is 83% of peak digital and the duration is exactly 5 seconds. The 6 standard "5.1" channels (FL, FR, C, Sub, RL, RR) are targetted in the wav file. The data for each of the 6 channels corresponds to the note sequence of the B11 musical chord. The list below shows, in the order interleaved in the wav file data section, the speaker channel, note name and note number, and the note frequency in the equally-tempered chromatic scale with A4 = 440.000 Hz:
+  Front Left          B2  (root)         123.471  Hz
+  Front Right         F3# (5th)          184.997	Hz
+  Front Center        A3 (flat7th)       220.000  Hz
+  Sub                 B1 (root)           61.735  Hz
+  Rear Left           C4# (9th)          277.183  Hz
+  Rear Right          E4 (11th)          329.628  Hz
+The note sent to the Sub channel is an octave lower than the next highest note which targets the Front Left channel. The Sub note at 61.735 Hz is the lowest note achievable on the F French Horn.
+*/
 BEGIN_BOF2D_NAMESPACE()
-
 
 BOF::BofEnum<BOF2D_AUDIO_FORMAT> S_Bof2dAudioFormatEnumConverter({
   { BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_PCM, "PCM" },
@@ -34,89 +43,37 @@ BOF::BofEnum<BOF2D_AUDIO_FORMAT> S_Bof2dAudioFormatEnumConverter({
   { BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_MAX, "MAX" },
   }, BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_MAX);
 
-#if 0
-/*
- * WAVE file header based on definition from
- * https://gist.github.com/Jon-Schneider/8b7c53d27a7a13346a643dac9c19d34f
- *
- * We must ensure this structure doesn't have any holes or
- * padding so we can just map it straight to the WAVE data.
- */
 #pragma pack(1)
-  struct wave_hdr {
-  /* RIFF Header: "RIFF" */
-  char riff_header[4];
-  /* size of audio data + sizeof(struct wave_hdr) - 8 */
-  int wav_size;
-  /* "WAVE" */
-  char wav_header[4];
-
-  /* Format Header */
-  /* "fmt " (includes trailing space) */
-  char fmt_header[4];
-  /* Should be 16 for PCM */
-  int fmt_chunk_size;
-  /* Should be 1 for PCM. 3 for IEEE Float */
-  int16_t audio_format;
-  int16_t num_channels;
-  int sample_rate;
-  /*
-   * Number of bytes per second
-   * sample_rate * num_channels * bit_depth/8
-   */
-  int byte_rate;
-  /* num_channels * bytes per sample */
-  int16_t sample_alignment;
-  /* bits per sample */
-  int16_t bit_depth;
-
-  /* Data Header */
-  /* "data" */
-  char data_header[4];
-  /*
-   * size of audio
-   * number of samples * num_channels * bit_depth/8
-   */
-  int data_bytes;
+//https://docs.fileformat.com/audio/wav/#:~:text=up%20to%20date.-,WAV%20File%20Format,contains%20the%20actual%20sample%20data
+struct BOF2D_WAV_HEADER
+{
+  /*000*/  char pRiffHeader_c[4];                 // RIFF Header: "RIFF" Marks the file as a riff file. Characters are each 1 byte long.*/
+  /*004*/  uint32_t WavTotalSizeInByteMinus8_U32; // Size of the overall file - 8 bytes, in bytes (32-bit integer). Typically, you’d fill this in after creation. */
+  /*008*/  char pWavHeader_c[4];                  //File Type Header. For our purposes, it always equals “WAVE”.
+  /*012*/  char pFmtHeader_c[4];                  //Format chunk marker. Includes trailing space and null
+  /*016*/  uint32_t FmtChunkSize_U32;             //Length of format data as listed above (Should be 16 for PCM)
+  /*020*/  uint16_t AudioFormat_U16;              // Should be 1 for PCM. 3 for IEEE Float 
+  /*022*/  uint16_t NbChannel_U16;                //Number of Channels
+  /*024*/  uint32_t SampleRateInHz_U32;           //Sample Rate in Hz. Common values are 44100 (CD), 48000 (DAT). Sample Rate = Number of Samples per second, or Hertz.
+  /*028*/  uint32_t ByteRate_U32;                 //Number of bytes per second:	(SampleRateInHz_U32 * BitPerSample_U16 * NbChannel_U16) / 8.
+  /*032*/  uint16_t SampleAlignment_U16;          //(NbChannel_U16 * BitPerSample_U16) / 8
+  /*034*/  uint16_t NbBitPerSample_U16;             //Bits per sample
+  /*036*/  char pDataHeader_X[4];                 //“data” chunk header. Marks the beginning of the data section.
+  /*040*/  uint32_t DataSizeInByte_U32;           //size of audio: number of samples * num_channels * bit_depth/8
 };
 #pragma pack()
-//writes out the wave header
 
-void write_wave_hdr(int fd, size_t size)
-{
-  struct wave_hdr wh;
-
-  memcpy(&wh.riff_header, "RIFF", 4);
-  wh.wav_size = (int)(size + sizeof(struct wave_hdr) - 8);
-  memcpy(&wh.wav_header, "WAVE", 4);
-  memcpy(&wh.fmt_header, "fmt ", 4);
-  wh.fmt_chunk_size = 16;
-  wh.audio_format = 1;
-  wh.num_channels = WAVE_OUT_NB_CHANNEL;
-  wh.sample_rate = WAVE_SAMPLE_RATE;
-  wh.sample_alignment = 2;
-  wh.bit_depth = 16;
-  wh.byte_rate = wh.sample_rate * wh.sample_alignment;
-  memcpy(&wh.data_header, "data", 4);
-  wh.data_bytes = (int)size;
-
-  _write(fd, &wh, sizeof(struct wave_hdr));
-}
-
-Bof2dAudioDecoder::Save()
-{
-int ofd = _open(pFnOut_c, O_BINARY | O_WRONLY | O_CREAT | O_TRUNC, 0666);
-
-#endif
 Bof2dAudioDecoder::Bof2dAudioDecoder()
 {
-//--A_BASEFN=AudioOut;--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_FMT=WAV
   mAudioOptionParam_X.push_back({ nullptr, "A_BASEFN", "if defined, audio buffer will be saved in this file","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudioOption_X.BasePath, PATH, 0, 0) });
+  mAudioOptionParam_X.push_back({ nullptr, "A_CHUNK", "If specifies, each audio subframe will be recorded in a separate file next to the global A_BASEFN file", "", "", BOF::BOFPARAMETER_ARG_FLAG::NONE, BOF_PARAM_DEF_VARIABLE(mAudioOption_X.SaveChunk_B, BOOL, true, 0) });
   mAudioOptionParam_X.push_back({ nullptr, "A_NBCHNL", "Specifies the number of audio channel to generate","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudioOption_X.NbChannel_U32, UINT32, 0, 4096) });
   mAudioOptionParam_X.push_back({ nullptr, "A_LAYOUT", "Specifies the channel layout to generate","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudioOption_X.ChannelLayout_U64, UINT64, 0, 0) });
   mAudioOptionParam_X.push_back({ nullptr, "A_RATE", "Specifies the audio sample rate to generate","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudioOption_X.SampleRateInHz_U32, UINT32, 0, 128000) });
   mAudioOptionParam_X.push_back({ nullptr, "A_FMT", "Specifies the audio format", "", "", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_ENUM(mAudioOption_X.Format_E, BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_PCM, BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_MAX, S_Bof2dAudioFormatEnumConverter, BOF2D_AUDIO_FORMAT) });
+  mAudioOptionParam_X.push_back({ nullptr, "A_BPS", "Specifies the number of bits per sample","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudioOption_X.NbBitPerSample_U32, UINT32, 8, 64) });
 }
+
 Bof2dAudioDecoder::~Bof2dAudioDecoder()
 {
   Close();
@@ -129,20 +86,35 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
   uint32_t  i_U32;
   BOF::BofCommandLineParser OptionParser;
 
-  Rts_E = OptionParser.ToByte(_rOption_S, mAudioOptionParam_X, nullptr, nullptr);
+  // Just in case, close previously opened media file.
+  Close();
 
+  mAudioOption_X.Reset();
+  Rts_E = OptionParser.ToByte(_rOption_S, mAudioOptionParam_X, nullptr, nullptr);
   if (Rts_E == BOF_ERR_NO_ERROR)
   {
-    // Just in case, close previously opened media file.
-    Close();
-
+    if (mAudioOption_X.NbBitPerSample_U32 == 8)
+    {
+      mSampleFmt_E = AV_SAMPLE_FMT_U8;
+    }
+    else if (mAudioOption_X.NbBitPerSample_U32 == 16)
+    {
+      mSampleFmt_E = AV_SAMPLE_FMT_S16;
+    }
+    else if (mAudioOption_X.NbBitPerSample_U32 == 24)
+    {
+      mSampleFmt_E = AV_SAMPLE_FMT_S32;
+    }
+    else
+    {
+      mSampleFmt_E = AV_SAMPLE_FMT_FLT;
+    }
     //  mpAudioFormatCtx_X = avformat_alloc_context();
     //  mpAudioBuffer_U8 = (uint8_t *)av_malloc(AVIO_CTX_BUF_SZ);
     //  mpAudioAvioCtx_X = avio_alloc_context(mpAudioBuffer_U8, AVIO_CTX_BUF_SZ, 0, &mAudioBuffer_X, &read_packet, nullptr, nullptr);
     //  mpAudioFormatCtx_X->pb = mpAudioAvioCtx_X;
 
-
-      // Open media file.
+// Open media file.
     Sts_i = avformat_open_input(&mpAudioFormatCtx_X, _rInputFile_S.c_str(), nullptr, nullptr);
     FFMPEG_CHK_IF_ERR(Sts_i, "Couldn't open file " + _rInputFile_S, Rts_E);
     if (Rts_E == BOF_ERR_NO_ERROR)
@@ -253,7 +225,7 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
         FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_channel_count", Rts_E);
         if (Rts_E == BOF_ERR_NO_ERROR)
         {
-          Sts_i = av_opt_set_int(mpAudioSwrCtx_X, "out_channel_count", WAVE_OUT_NB_CHANNEL, 0);
+          Sts_i = av_opt_set_int(mpAudioSwrCtx_X, "out_channel_count", mAudioOption_X.NbChannel_U32, 0);
           FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_channel_count", Rts_E);
           if (Rts_E == BOF_ERR_NO_ERROR)
           {
@@ -261,7 +233,7 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
             FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_channel_layout", Rts_E);
             if (Rts_E == BOF_ERR_NO_ERROR)
             {
-              Sts_i = av_opt_set_int(mpAudioSwrCtx_X, "out_channel_layout", (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, 0);
+              Sts_i = av_opt_set_int(mpAudioSwrCtx_X, "out_channel_layout", mAudioOption_X.ChannelLayout_U64, 0);
               FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_channel_layout", Rts_E);
               if (Rts_E == BOF_ERR_NO_ERROR)
               {
@@ -269,7 +241,7 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
                 FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_sample_rate", Rts_E);
                 if (Rts_E == BOF_ERR_NO_ERROR)
                 {
-                  Sts_i = av_opt_set_int(mpAudioSwrCtx_X, "out_sample_rate", WAVE_SAMPLE_RATE, 0);
+                  Sts_i = av_opt_set_int(mpAudioSwrCtx_X, "out_sample_rate", mAudioOption_X.SampleRateInHz_U32, 0);
                   FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_sample_rate", Rts_E);
                   if (Rts_E == BOF_ERR_NO_ERROR)
                   {
@@ -296,10 +268,15 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
         }
       }
     }
-    /*
-        }
+
+    if (Rts_E == BOF_ERR_NO_ERROR)
+    {
+      if (mAudioOption_X.BasePath.IsValid())
+      {
+        Rts_E = CreateHeader();
       }
-      */
+    }
+
     if (Rts_E != BOF_ERR_NO_ERROR)
     {
       Close();
@@ -307,62 +284,13 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
   }
   return Rts_E;
 }
-#if 0
-int avio_close2(AVIOContext *s)
-{
- // URLContext *h;
 
-  if (!s)
-    return 0;
 
-  avio_flush(s);
-  //h = s->opaque;
-  s->opaque = nullptr;
-
-  av_freep(&s->buffer);
-//  if (s->write_flag)
-//    av_log(s, AV_LOG_VERBOSE, "Statistics: %d seeks, %d writeouts\n", s->seek_count, s->writeout_count);
-//  else
-//    av_log(s, AV_LOG_VERBOSE, "Statistics: %"PRId64" bytes read, %d seeks\n", s->bytes_read, s->seek_count);
-  av_opt_free(s);
-
-  avio_context_free(&s);
-
-  return 0; // ffurl_close(h);
-}
-
-void avformat_close_input2(AVFormatContext **ps)
-{
-  AVFormatContext *s;
-  AVIOContext *pb;
-
-  if (!ps || !*ps)
-    return;
-
-  s = *ps;
-  pb = s->pb;
-
-  if ((s->iformat && strcmp(s->iformat->name, "image2") && s->iformat->flags & AVFMT_NOFILE) ||
-    (s->flags & AVFMT_FLAG_CUSTOM_IO))
-    pb = nullptr;
-
-  //flush_packet_queue(s);
-
-  if (s->iformat)
-    if (s->iformat->read_close)
-      s->iformat->read_close(s);
-
-  avformat_free_context(s);
-
-  *ps = nullptr;
-
-  avio_close2(pb);
-}
-#endif
 BOFERR Bof2dAudioDecoder::BeginRead(BOF2D_AUDIO_DATA &_rAudioData_X)
 {
   BOFERR Rts_E = BOF_ERR_EOF;
   int Sts_i;
+  uint32_t TotalSizeOfAudioConverted_U32;
 
   _rAudioData_X.Reset();
   if (IsAudioStreamPresent())
@@ -398,15 +326,11 @@ BOFERR Bof2dAudioDecoder::BeginRead(BOF2D_AUDIO_DATA &_rAudioData_X)
                   mpAudioFrame_X->nb_samples, mpAudioFrame_X->sample_rate, mpAudioFrame_X->linesize[0], mpAudioFrame_X->data[0],
                   mpAudioFrame_X->channel_layout);
 
-                //continuer leak ici 
-                //!! break dans main fct
-                //! 
-                Rts_E = ConvertAudio(false, mpAudioFrame_X, mpAudioFrameConverted_X,  WAVE_OUT_NB_CHANNEL, (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, WAVE_SAMPLE_RATE, AV_SAMPLE_FMT_S16);
-                //Rts_E = BOF_ERR_ADDRESS;
-
+                //Rts_E = ConvertAudio(false, mpAudioFrame_X, mpAudioFrameConverted_X, mAudioOption_X.NbChannel_U32, static_cast<uint32_t>(mAudioOption_X.ChannelLayout_U64), mAudioOption_X.SampleRateInHz_U32, AV_SAMPLE_FMT_S16);
+                Rts_E = ConvertAudio(TotalSizeOfAudioConverted_U32);
                 if (Rts_E == BOF_ERR_NO_ERROR)
                 {
-                  _rAudioData_X.Data_X.SetStorage(mpAudioFrameConverted_X->linesize[0], mpAudioFrameConverted_X->linesize[0], mpAudioFrameConverted_X->data[0]);
+                  _rAudioData_X.Data_X.SetStorage(mpAudioFrameConverted_X->linesize[0], TotalSizeOfAudioConverted_U32, mpAudioFrameConverted_X->data[0]);
                   _rAudioData_X.NbSample_U32 = mpAudioFrameConverted_X->nb_samples;
                   _rAudioData_X.Param_X.NbChannel_U32 = mpAudioFrameConverted_X->channels;
                   _rAudioData_X.Param_X.ChannelLayout_U64 = mpAudioFrameConverted_X->channel_layout;
@@ -424,7 +348,6 @@ BOFERR Bof2dAudioDecoder::BeginRead(BOF2D_AUDIO_DATA &_rAudioData_X)
   }
   return Rts_E;
 }
-
 
 BOFERR Bof2dAudioDecoder::EndRead()
 {
@@ -447,49 +370,136 @@ BOFERR Bof2dAudioDecoder::EndRead()
   return Rts_E;
 }
 
-BOFERR Bof2dAudioDecoder::ConvertAudio(bool _Flush_B, AVFrame *_pInAudioFrame_X, AVFrame *_pOutAudioFrameConverted_X, uint32_t _OutNbAudioChannel_U32, uint32_t _OutAudioChannelLayout_U32, uint32_t _OutAudioSampleRateInHz_U32,  enum AVSampleFormat _OutAudioSampleFmt_E)
+BOFERR Bof2dAudioDecoder::WriteHeader(uint64_t _Size_U64)
 {
-  BOFERR Rts_E = BOF_ERR_EINVAL;
-  uint32_t NbAudioSample_U32, AudioBufferSize_U32, AudioConvertSizePerChannelInSample_U32;
-  int64_t AudioDelay_S64;
+  BOFERR Rts_E = BOF_ERR_NOT_OPENED;
+  BOF2D_WAV_HEADER WavHeader_X;
+  uint32_t Nb_U32;
+  int64_t Pos_S64;
 
-  if ((_pInAudioFrame_X) && (_pOutAudioFrameConverted_X) && (_pInAudioFrame_X->nb_samples))
+  Pos_S64 = BOF::Bof_GetFileIoPosition(mOutAudioFile);
+  if (Pos_S64 != -1)
   {
-    AudioDelay_S64 = swr_get_delay(mpAudioSwrCtx_X, mpAudioCodecCtx_X->sample_rate);
-    NbAudioSample_U32 = (int)av_rescale_rnd(AudioDelay_S64 + _pInAudioFrame_X->nb_samples, _OutAudioSampleRateInHz_U32, mpAudioCodecCtx_X->sample_rate, AV_ROUND_UP);
-    AudioBufferSize_U32 = av_samples_get_buffer_size(NULL, _OutNbAudioChannel_U32, NbAudioSample_U32, _OutAudioSampleFmt_E, 0);
+    BOF::Bof_SetFileIoPosition(mOutAudioFile, 0, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
+    memcpy(&WavHeader_X.pRiffHeader_c, "RIFF", 4);
+    WavHeader_X.WavTotalSizeInByteMinus8_U32 = static_cast<uint32_t>(_Size_U64 + sizeof(struct BOF2D_WAV_HEADER) - 8);
+    memcpy(&WavHeader_X.pWavHeader_c, "WAVE", 4);
+    memcpy(&WavHeader_X.pFmtHeader_c, "fmt ", 4);
+    WavHeader_X.FmtChunkSize_U32 = 16;  //PCM
+    WavHeader_X.AudioFormat_U16 = 1;    //PCM
+    WavHeader_X.NbChannel_U16 = static_cast<uint16_t>(mAudioOption_X.NbChannel_U32);
+    WavHeader_X.SampleRateInHz_U32 = mAudioOption_X.SampleRateInHz_U32;
+    WavHeader_X.SampleAlignment_U16 = static_cast<uint16_t>((mAudioOption_X.NbChannel_U32 * mAudioOption_X.NbBitPerSample_U32) / 8);
+    WavHeader_X.NbBitPerSample_U16 = static_cast<uint16_t>(mAudioOption_X.NbBitPerSample_U32);
+    WavHeader_X.ByteRate_U32 = mAudioOption_X.SampleRateInHz_U32 * WavHeader_X.SampleAlignment_U16;
+    memcpy(&WavHeader_X.pDataHeader_X, "data", 4);
+    WavHeader_X.DataSizeInByte_U32 = static_cast<uint32_t>(_Size_U64);
+    Nb_U32 = sizeof(struct BOF2D_WAV_HEADER);
+    Rts_E = BOF::Bof_WriteFile(mOutAudioFile, Nb_U32, reinterpret_cast<uint8_t *>(&WavHeader_X));
+    //NO    BOF::Bof_SetFileIoPosition(mOutAudioFile, Pos_S64, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
+  }
+  return Rts_E;
+}
 
-    //pAudioBuffer_U8 = (uint8_t *)av_mallocz(AudioBufferSize_U32);
-    Rts_E = BOF_ERR_TOO_BIG;
-    BOF_ASSERT(AudioBufferSize_U32 <= MAX_AUDIO_SIZE);
-    if (AudioBufferSize_U32 <= MAX_AUDIO_SIZE)
+BOFERR Bof2dAudioDecoder::CreateHeader()
+{
+  BOFERR Rts_E;
+  std::string Extension_S = (mAudioOption_X.Format_E == BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_WAV) ? ".wav" : ".pcm";
+
+  Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mAudioOption_X.BasePath.FullPathNameWithoutExtension(false) + Extension_S, false, mOutAudioFile);
+  if (Rts_E == BOF_ERR_NO_ERROR)
+  {
+    Rts_E = WriteHeader(0);
+  }
+  return Rts_E;
+}
+
+BOFERR Bof2dAudioDecoder::WriteChunk(uint32_t _ChunkSizeInByte_U32)
+{
+  BOFERR Rts_E;
+  uint32_t Nb_U32, i_U32;
+  intptr_t OutAudioChunkFile;
+  std::string ChunkPath_S;
+
+  Nb_U32 = _ChunkSizeInByte_U32;
+  Rts_E = BOF::Bof_WriteFile(mOutAudioFile, Nb_U32, mpAudioFrameConverted_X->data[0]);
+  if (Rts_E == BOF_ERR_NO_ERROR)
+  {
+    if (mAudioOption_X.SaveChunk_B)
     {
-      //??? memset(mpAudioBuffer_U8, 0, AudioBufferSize_U32); //????
-      Rts_E = BOF_ERR_NO_ERROR;
-      av_samples_fill_arrays(_pOutAudioFrameConverted_X->data, _pOutAudioFrameConverted_X->linesize, mpAudioBuffer_U8, _OutNbAudioChannel_U32, NbAudioSample_U32, _OutAudioSampleFmt_E, 0);
-      //int sz = NbAudioSample_U32 * sizeof(int16_t) * _OutNbAudioChannel_U32;
-      /*
-        * !flush is used to check if we are flushing any remaining
-        * conversion buffers...
-        */
-      AudioConvertSizePerChannelInSample_U32 = swr_convert(mpAudioSwrCtx_X, &mpAudioBuffer_U8, NbAudioSample_U32, _Flush_B ? nullptr : (const uint8_t **)_pInAudioFrame_X->data, _Flush_B ? 0 : _pInAudioFrame_X->nb_samples);
-
-      _pOutAudioFrameConverted_X->nb_samples = AudioConvertSizePerChannelInSample_U32;
-      _pOutAudioFrameConverted_X->channels = _OutNbAudioChannel_U32;
-      _pOutAudioFrameConverted_X->channel_layout = _OutAudioChannelLayout_U32; // (WAVE_OUT_NB_CHANNEL == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO
-      _pOutAudioFrameConverted_X->format = _OutAudioSampleFmt_E;
-      _pOutAudioFrameConverted_X->sample_rate = _OutAudioSampleRateInHz_U32;
-      _pOutAudioFrameConverted_X->pkt_pos = _pInAudioFrame_X->pkt_pos;
-      _pOutAudioFrameConverted_X->pkt_duration = _pInAudioFrame_X->pkt_duration;
-      _pOutAudioFrameConverted_X->pkt_size = _pInAudioFrame_X->pkt_size;
-
-      int16_t *pData_S16 = (int16_t *)_pOutAudioFrameConverted_X->data[0];
-      printf("Cnv Audio %x:%p nbs %d ch %d layout %zx Fmt %d Rate %d Pos %zd Dur %zd Sz %d\n", _pOutAudioFrameConverted_X->linesize[0], _pOutAudioFrameConverted_X->data[0],
-        _pOutAudioFrameConverted_X->nb_samples, _pOutAudioFrameConverted_X->channels, _pOutAudioFrameConverted_X->channel_layout, _pOutAudioFrameConverted_X->format, _pOutAudioFrameConverted_X->sample_rate,
-        _pOutAudioFrameConverted_X->pkt_pos, _pOutAudioFrameConverted_X->pkt_duration, _pOutAudioFrameConverted_X->pkt_size);
-      printf("Cnv Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pData_S16[0], pData_S16[1], pData_S16[2], pData_S16[3], pData_S16[4], pData_S16[5], pData_S16[6], pData_S16[7]);
+      //for (i_U32 = 0; i_U32 < mAudioOption_X.NbChannel_U32; i_U32++)
+      i_U32 = 0;
+      {
+        ChunkPath_S = BOF::Bof_Sprintf("%s_%08zd_%03d.pcm", mAudioOption_X.BasePath.FullPathNameWithoutExtension(false).c_str(), mNbTotalAudioFrame_U64, i_U32);
+        Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, ChunkPath_S, false, OutAudioChunkFile);
+        if (Rts_E == BOF_ERR_NO_ERROR)
+        {
+          Nb_U32 = _ChunkSizeInByte_U32;
+          Rts_E = BOF::Bof_WriteFile(OutAudioChunkFile, Nb_U32, mpAudioFrameConverted_X->data[i_U32]);
+          BOF::Bof_CloseFile(OutAudioChunkFile);
+        }
+      }
     }
   }
+  return Rts_E;
+}
+BOFERR Bof2dAudioDecoder::CloseHeader()
+{
+  BOFERR Rts_E = BOF_ERR_EINVAL;
+  Rts_E = WriteHeader(mNbTotaAudioSample_U64);
+  BOF::Bof_CloseFile(mOutAudioFile);
+  return Rts_E;
+}
+
+BOFERR Bof2dAudioDecoder::ConvertAudio(uint32_t &_rTotalSizeOfAudioConverted_U32)
+{
+  BOFERR Rts_E;
+  uint32_t NbAudioSample_U32, AudioBufferSize_U32, NbAudioConvertedSamplePerChannel_U32;
+  int64_t AudioDelay_S64;
+
+  _rTotalSizeOfAudioConverted_U32 = 0;
+  AudioDelay_S64 = swr_get_delay(mpAudioSwrCtx_X, mpAudioCodecCtx_X->sample_rate);
+  NbAudioSample_U32 = (int)av_rescale_rnd(AudioDelay_S64 + mpAudioFrame_X->nb_samples, mAudioOption_X.SampleRateInHz_U32, mpAudioCodecCtx_X->sample_rate, AV_ROUND_UP);
+  AudioBufferSize_U32 = av_samples_get_buffer_size(NULL, mAudioOption_X.NbChannel_U32, NbAudioSample_U32, mSampleFmt_E, 0);
+
+  Rts_E = BOF_ERR_TOO_BIG;
+  BOF_ASSERT(AudioBufferSize_U32 <= MAX_AUDIO_SIZE);
+  if (AudioBufferSize_U32 <= MAX_AUDIO_SIZE)
+  {
+    Rts_E = BOF_ERR_NO_ERROR;
+    av_samples_fill_arrays(mpAudioFrameConverted_X->data, mpAudioFrameConverted_X->linesize, mpAudioBuffer_U8, mAudioOption_X.NbChannel_U32, NbAudioSample_U32, mSampleFmt_E, 0);
+    NbAudioConvertedSamplePerChannel_U32 = swr_convert(mpAudioSwrCtx_X, &mpAudioBuffer_U8, NbAudioSample_U32, (const uint8_t **)mpAudioFrame_X->data, mpAudioFrame_X->nb_samples);
+    _rTotalSizeOfAudioConverted_U32 = (NbAudioConvertedSamplePerChannel_U32 * mAudioOption_X.NbChannel_U32 * mAudioOption_X.NbBitPerSample_U32) / 8;
+    //printf("---->NbAudioSample %d memset %d NbAudioConvertSamplePerChannel %d->%d linesize %d\n", NbAudioSample_U32, AudioBufferSize_U32, NbAudioConvertedSamplePerChannel_U32, _rTotalSizeOfAudioConverted_U32, mpAudioFrameConverted_X->linesize[0]);
+    BOF_ASSERT(_rTotalSizeOfAudioConverted_U32 <= static_cast<uint32_t>(mpAudioFrameConverted_X->linesize[0]));
+    if (_rTotalSizeOfAudioConverted_U32 <= static_cast<uint32_t>(mpAudioFrameConverted_X->linesize[0]))
+    {
+      mpAudioFrameConverted_X->nb_samples = NbAudioConvertedSamplePerChannel_U32;
+      mpAudioFrameConverted_X->channels = mAudioOption_X.NbChannel_U32;
+      mpAudioFrameConverted_X->channel_layout = static_cast<uint32_t>(mAudioOption_X.ChannelLayout_U64);
+      mpAudioFrameConverted_X->format = mSampleFmt_E;
+      mpAudioFrameConverted_X->sample_rate = mAudioOption_X.SampleRateInHz_U32;
+      mpAudioFrameConverted_X->pkt_pos = mpAudioFrame_X->pkt_pos;
+      mpAudioFrameConverted_X->pkt_duration = mpAudioFrame_X->pkt_duration;
+      mpAudioFrameConverted_X->pkt_size = mpAudioFrame_X->pkt_size;
+      mNbTotalAudioFrame_U64++;
+      mNbTotaAudioSample_U64 += _rTotalSizeOfAudioConverted_U32;
+      if (mAudioOption_X.BasePath.IsValid())
+      {
+        Rts_E = WriteChunk(_rTotalSizeOfAudioConverted_U32);
+      }
+      int16_t *pData_S16 = (int16_t *)mpAudioFrameConverted_X->data[0];
+      printf("Cnv Audio %x->%x:%p nbs %d ch %d layout %zx Fmt %d Rate %d Pos %zd Dur %zd Sz %d\n", mpAudioFrameConverted_X->linesize[0], _rTotalSizeOfAudioConverted_U32, mpAudioFrameConverted_X->data[0],
+        mpAudioFrameConverted_X->nb_samples, mpAudioFrameConverted_X->channels, mpAudioFrameConverted_X->channel_layout, mpAudioFrameConverted_X->format, mpAudioFrameConverted_X->sample_rate,
+        mpAudioFrameConverted_X->pkt_pos, mpAudioFrameConverted_X->pkt_duration, mpAudioFrameConverted_X->pkt_size);
+      printf("Cnv Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pData_S16[0], pData_S16[1], pData_S16[2], pData_S16[3], pData_S16[4], pData_S16[5], pData_S16[6], pData_S16[7]);
+    }
+    else
+    {
+      Rts_E = BOF_ERR_EOVERFLOW;
+    }
+  }
+
   return Rts_E;
 }
 /*
@@ -520,7 +530,7 @@ BOFERR Bof2dAudioDecoder::Close()
 {
   BOFERR Rts_E;
   bool AudioBufferHasBeenFreeed_B = false;
-//  avio_context_free(&mpAudioAvioCtx_X);
+  //  avio_context_free(&mpAudioAvioCtx_X);
 
   swr_free(&mpAudioSwrCtx_X);
   if (mpAudioFrame_X)
@@ -537,7 +547,7 @@ BOFERR Bof2dAudioDecoder::Close()
   }
   if (!AudioBufferHasBeenFreeed_B)
   {
-//If we just open/close decoder without calling read we need to free mpAudioBuffer_U8 here
+    //If we just open/close decoder without calling read we need to free mpAudioBuffer_U8 here
     av_freep(&mpAudioBuffer_U8);
   }
   if (mpAudioFrameConverted_X)
@@ -548,9 +558,14 @@ BOFERR Bof2dAudioDecoder::Close()
   //avcodec_close: Do not use this function. Use avcodec_free_context() to destroy a codec context(either open or closed)
   //avcodec_close(mpAudioCodecCtx_X);
   avcodec_free_context(&mpAudioCodecCtx_X);
-  
+
   avformat_close_input(&mpAudioFormatCtx_X);
 
+  if (mAudioOption_X.BasePath.IsValid())
+  {
+    CloseHeader();
+  }
+  mSampleFmt_E = AV_SAMPLE_FMT_NONE;
   mAudioStreamIndex_i = -1;
   mpAudioCodecParam_X = nullptr;
   mpAudioCodec_X = nullptr;
@@ -560,6 +575,8 @@ BOFERR Bof2dAudioDecoder::Close()
   mNbAudioPacketSent_U64 = 0;
   mNbAudioFrameReceived_U64 = 0;
   mNbTotalAudioFrame_U64 = 0;
+  mNbTotaAudioSample_U64 = 0;
+  mAudioOption_X.Reset();
 
   Rts_E = BOF_ERR_NO_ERROR;
   return Rts_E;
@@ -569,32 +586,5 @@ bool Bof2dAudioDecoder::IsAudioStreamPresent()
 {
   return(mAudioStreamIndex_i != -1);
 }
-/*
-BOFERR Bof2dAudioDecoder::ParseOption(const std::string &_rOption_S)
-{
-  BOFERR Rts_E = BOF_ERR_NO_ERROR;
-  std::vector<std::string> AudioOptionCollection;
-  BOF::BofCommandLineParser OptionParser;
-  int Argc_i, i;
-  char **ppArgv_c;
 
-  mAudioOption_X.Reset();
-  AudioOptionCollection = BOF::Bof_StringSplit(_rOption_S, ";");
-  Argc_i = static_cast<int>(AudioOptionCollection.size());
-  if (Argc_i)
-  {
-    ppArgv_c = new char *[Argc_i];
-    if (ppArgv_c)
-    {
-      for (i = 0; i < Argc_i; i++)
-      {
-        ppArgv_c[i] = (char *)AudioOptionCollection[i].c_str();
-      }
-      Rts_E = OptionParser.ToByte(Argc_i, ppArgv_c, mAudioOptionParam_X, nullptr, nullptr);
-      BOF_SAFE_DELETE_ARRAY(ppArgv_c);
-    }
-  }
-  return Rts_E;
-}
-*/
 END_BOF2D_NAMESPACE()

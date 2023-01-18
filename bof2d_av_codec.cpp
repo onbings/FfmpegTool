@@ -43,13 +43,13 @@ Bof2dAvCodec::~Bof2dAvCodec()
   mpuAudioDecoder->Close();
   mpuVideoDecoder->Close();
 }
-BOFERR Bof2dAvCodec::Open(const std::string &_rInputFile_S, const std::string &_rOption_S)
+BOFERR Bof2dAvCodec::Open(const std::string &_rInputFile_S, const std::string &_rVideoOption_S, const std::string &_rAudioOption_S)
 {
   BOFERR Rts_E = BOF_ERR_NO_ERROR, StsVideo_E, StsAudio_E;
 
-  StsVideo_E = mpuVideoDecoder->Open(_rInputFile_S, _rOption_S);
+  StsVideo_E = mpuVideoDecoder->Open(_rInputFile_S, _rVideoOption_S);
 
-  StsAudio_E = mpuAudioDecoder->Open(_rInputFile_S, _rOption_S);
+  StsAudio_E = mpuAudioDecoder->Open(_rInputFile_S, _rAudioOption_S);
   
   if ((StsVideo_E != BOF_ERR_NO_ERROR) && (mpuVideoDecoder->IsVideoStreamPresent()))
   {
@@ -113,10 +113,6 @@ void Bof2d_FfmpegLogCallback(void *_pAvcl, int _Level_i, const char *_pFormat_c,
     vsprintf(pLog_c, _pFormat_c, _VaList);
     //va_end(VaList);
     printf("Ffmpeg L%03d->%s", _Level_i, pLog_c);
-    if (!strncmp(pLog_c, "AVIndex", 7))
-    {
-      printf("jj");
-    }
   }
 }
 
