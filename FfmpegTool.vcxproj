@@ -146,15 +146,19 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="bof2d_audio_decoder.cpp" />
+    <ClCompile Include="bof2d_audio_encoder.cpp" />
     <ClCompile Include="bof2d_av_codec.cpp" />
     <ClCompile Include="bof2d_video_decoder.cpp" />
+    <ClCompile Include="bof2d_video_encoder.cpp" />
     <ClCompile Include="FfmpegDecoder.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bof2d_audio_decoder.h" />
+    <ClInclude Include="bof2d_audio_encoder.h" />
     <ClInclude Include="bof2d_av_codec.h" />
     <ClInclude Include="bof2d_video_decoder.h" />
+    <ClInclude Include="bof2d_video_encoder.h" />
     <ClInclude Include="FfmpegDecoder.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -1,5 +1,7 @@
 /*
 	It is FFmpeg decoder class. Sample for article from unick-soft.ru
+  https://github.com/UnickSoft/FFMpeg-decode-example/blob/master/ffmpegDecoder/ffmpegDecode.h
+  http://unick-soft.ru/article.php?id=14
 */
 
 #ifndef __FFMPEG_DECODER__

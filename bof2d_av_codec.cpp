@@ -17,9 +17,34 @@
    V 1.00  Sep 30 2000  BHA : Initial release
  */
 #include "bof2d_av_codec.h"
+#include "bof2d_video_decoder.h"
+#include "bof2d_audio_decoder.h"
+#include "bof2d_video_encoder.h"
+#include "bof2d_audio_encoder.h"
+
 #include <map>
 
 BEGIN_BOF2D_NAMESPACE()
+
+BOF::BofEnum<BOF2D_AV_CONTAINER_FORMAT> S_Bof2dAvContainerFormatEnumConverter({
+  { BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, "NONE" },
+  { BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_MP4, "MP4" },
+  { BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_MAX, "MAX" },
+  }, BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE);
+
+BOF::BofEnum<BOF2D_AV_VIDEO_FORMAT> S_Bof2dAvVideoFormatEnumConverter({
+  { BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_PNG, "PNG" },
+  { BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_TGA, "TGA" },
+  { BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_JPG, "JPG" },
+  { BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP, "BMP" },
+  { BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_MAX, "MAX" },
+  }, BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_MAX);
+
+BOF::BofEnum<BOF2D_AV_AUDIO_FORMAT> S_Bof2dAvAudioFormatEnumConverter({
+  { BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_PCM, "PCM" },
+  { BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_WAV, "WAV" },
+  { BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_MAX, "MAX" },
+  }, BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_MAX);
 
 Bof2dAvCodec::Bof2dAvCodec(int _LogLevel_i)
 {
@@ -43,13 +68,13 @@ Bof2dAvCodec::~Bof2dAvCodec()
   mpuAudioDecoder->Close();
   mpuVideoDecoder->Close();
 }
-BOFERR Bof2dAvCodec::Open(const std::string &_rInputFile_S, const std::string &_rVideoOption_S, const std::string &_rAudioOption_S)
+BOFERR Bof2dAvCodec::OpenDecoder(const std::string &_rInputFile_S, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S)
 {
   BOFERR Rts_E = BOF_ERR_NO_ERROR, StsVideo_E, StsAudio_E;
 
-  StsVideo_E = mpuVideoDecoder->Open(_rInputFile_S, _rVideoOption_S);
+  StsVideo_E = mpuVideoDecoder->Open(_rInputFile_S, _rVidDecOption_S);
 
-  StsAudio_E = mpuAudioDecoder->Open(_rInputFile_S, _rAudioOption_S);
+  StsAudio_E = mpuAudioDecoder->Open(_rInputFile_S, _rAudDecOption_S);
   
   if ((StsVideo_E != BOF_ERR_NO_ERROR) && (mpuVideoDecoder->IsVideoStreamPresent()))
   {
@@ -61,15 +86,15 @@ BOFERR Bof2dAvCodec::Open(const std::string &_rInputFile_S, const std::string &_
   }
   return Rts_E;
 }
-BOFERR Bof2dAvCodec::BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X, BOF2D_AUDIO_DATA &_rAudioData_X)
+BOFERR Bof2dAvCodec::BeginRead(BOF2D_VID_DEC_OUT &_rVidDecData_X, BOF2D_AUD_DEC_OUT &_rAudDecData_X)
 {
   BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
 
-  _rVideoData_X.Reset();
-  StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent()) ? mpuVideoDecoder->BeginRead(_rVideoData_X): BOF_ERR_NO_ERROR;
+  _rVidDecData_X.Reset();
+  StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent()) ? mpuVideoDecoder->BeginRead(_rVidDecData_X): BOF_ERR_NO_ERROR;
   
-  _rAudioData_X.Reset();
-  StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent()) ? mpuAudioDecoder->BeginRead(_rAudioData_X) : BOF_ERR_NO_ERROR;
+  _rAudDecData_X.Reset();
+  StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent()) ? mpuAudioDecoder->BeginRead(_rAudDecData_X) : BOF_ERR_NO_ERROR;
   
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E: StsVideo_E;
 }
@@ -83,7 +108,7 @@ BOFERR Bof2dAvCodec::EndRead()
 
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
 }
-BOFERR Bof2dAvCodec::Close()
+BOFERR Bof2dAvCodec::CloseDecoder()
 {
   BOFERR Rts_E;
 
@@ -93,6 +118,45 @@ BOFERR Bof2dAvCodec::Close()
     Rts_E = mpuAudioDecoder->Close();
   }
   return Rts_E;
+}
+BOFERR Bof2dAvCodec::OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, BOF2D_AV_VIDEO_FORMAT _VideoFormat_E, BOF2D_AV_AUDIO_FORMAT _AudioFormat_E, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S)
+{
+  //_ContainerFormat_E can be none 
+  BOFERR Rts_E = BOF_ERR_NOT_SUPPORTED;
+  return Rts_E;
+}
+BOFERR Bof2dAvCodec::BeginWrite(BOF2D_VID_DEC_OUT &_rVidDecOut_X, BOF2D_AUD_DEC_OUT &_rAudDecOut_X)
+{
+  BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
+
+  StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent()) ? mpuVideoEncoder->BeginWrite(_rVidDecOut_X) : BOF_ERR_NO_ERROR;
+
+  StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent()) ? mpuAudioEncoder->BeginWrite(_rAudDecOut_X) : BOF_ERR_NO_ERROR;
+
+  return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
+}
+BOFERR Bof2dAvCodec::EndWrite()
+{
+  BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
+
+  StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent()) ? mpuVideoEncoder->EndWrite() : BOF_ERR_NO_ERROR;
+
+  StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent()) ? mpuAudioEncoder->EndWrite() : BOF_ERR_NO_ERROR;
+
+  return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
+}
+
+BOFERR Bof2dAvCodec::CloseEncoder()
+{
+  BOFERR Rts_E;
+
+  Rts_E = mpuVideoEncoder->Close();
+  if (Rts_E == BOF_ERR_NO_ERROR)
+  {
+    Rts_E = mpuAudioEncoder->Close();
+  }
+  return Rts_E;
+
 }
 /*
 * @param avcl A pointer to an arbitrary struct of which the first field is a

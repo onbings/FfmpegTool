@@ -21,32 +21,35 @@
 #include "bof2d.h"
 #include <C:\Program Files (x86)\Visual Leak Detector\include\vld.h>
 
-#include <bofstd/bofsystem.h>
+#include "bof2d_av_codec.h"
+#include <bofstd/bofcommandlineparser.h>
 
 extern "C"
 {
 #include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
 #include <libavfilter/avfilter.h>
 #include <libswscale/swscale.h>
 #include "libavutil/imgutils.h"
 }
 
 BEGIN_BOF2D_NAMESPACE()
-struct BOF2D_EXPORT BOF2D_VIDEO_DATA
-{
-  BOF::BOF_BUFFER Data_X;
-  BOF2D::BOF_SIZE Size_X;
 
-  BOF2D_VIDEO_DATA()
+struct BOF2D_EXPORT BOF2D_VID_DEC_OPTION
+{
+  uint32_t Width_U32;
+  uint32_t Height_U32;
+  uint32_t Bps_U32;
+
+  BOF2D_VID_DEC_OPTION()
   {
     Reset();
   }
 
   void Reset()
   {
-    Data_X.Reset();
-    Size_X.Reset();
+    Width_U32 = 0;
+    Height_U32 = 0;
+    Bps_U32 = 0;
   }
 };
 class BOF2D_EXPORT Bof2dVideoDecoder
@@ -56,51 +59,61 @@ public:
   virtual ~Bof2dVideoDecoder();
 
   BOFERR Open(const std::string &_rInputFile_S, const std::string &_rOption_S);
-  BOFERR BeginRead(BOF2D_VIDEO_DATA &_rVideoData_X);
-  BOFERR EndRead();
   BOFERR Close();
+  BOFERR BeginRead(BOF2D_VID_DEC_OUT &_rVidDecOut_X);
+  BOFERR EndRead();
+
   bool IsVideoStreamPresent();
 
 private:
+  BOFERR ConvertVideo();
+
+  std::atomic<bool> mDecoderReady_B = false;
   std::atomic<bool> mReadBusy_B = false;
-  std::string mOutputCodec_S;
-  AVFormatContext *mpVideoFormatCtx_X = nullptr;
+  std::vector<BOF::BOFPARAMETER> mVidDecOptionParam_X;
+  BOF2D_VID_DEC_OPTION mVidDecOption_X;
+  AVPacket mVidDecPacket_X;
+  BOF2D_VID_DEC_OUT mVidDecOut_X;
+  enum AVPixelFormat mPixelFmt_E = AV_PIX_FMT_NONE;
+
+  //std::string mOutputCodec_S;
+  AVFormatContext *mpVidDecFormatCtx_X = nullptr;
   int mVideoStreamIndex_i = -1;
-  const AVCodecParameters *mpVideoCodecParam_X = nullptr;
-  const AVCodec *mpVideoCodec_X = nullptr;
-  AVCodecContext *mpVideoCodecCtx_X = nullptr;
-  AVFrame *mpVideoFrame_X = nullptr;
-  AVFrame *mpVideoDestFrame_X = nullptr;
-  AVFrame *mpVideoFrameFiltered_X = nullptr;
+  const AVCodecParameters *mpVidDecCodecParam_X = nullptr;
+  const AVCodec *mpVidDecCodec_X = nullptr;
+  AVCodecContext *mpVidDecCodecCtx_X = nullptr;
+  AVFrame *mpVidDecFrame_X = nullptr;
+  AVFrame *mpVidDecDestFrame_X = nullptr;
+  AVFrame *mpVidDecFrameFiltered_X = nullptr;
 
-  AVColorPrimaries mColorPrimaries_E = AVColorPrimaries::AVCOL_PRI_RESERVED;
-  AVColorRange mColorRange_E  = AVColorRange::AVCOL_RANGE_UNSPECIFIED;
-  AVColorTransferCharacteristic mColorTrf_E = AVColorTransferCharacteristic::AVCOL_TRC_RESERVED;
-  AVColorSpace mColorSpace_E = AVColorSpace::AVCOL_SPC_RESERVED;
+  AVColorPrimaries mVidDecColorPrimaries_E = AVColorPrimaries::AVCOL_PRI_RESERVED;
+  AVColorRange mVidDecColorRange_E  = AVColorRange::AVCOL_RANGE_UNSPECIFIED;
+  AVColorTransferCharacteristic mVidDecColorTrf_E = AVColorTransferCharacteristic::AVCOL_TRC_RESERVED;
+  AVColorSpace mVidDecColorSpace_E = AVColorSpace::AVCOL_SPC_RESERVED;
 
-  AVPixelFormat mInputVideoPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
-  AVPixelFormat mOutputVideoPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
-  AVPixelFormat mRgbVideoPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
+  AVPixelFormat mVidDecInPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
+  AVPixelFormat mVidDecVideoOutPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
+  AVPixelFormat mVidDecRgbPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
 
   bool mIsVideoInterlaced_B = false;
-  AVRational mVideoFrameRate_X = { 0, 0 };  //or av_make_q
-  AVRational mVideoTimeBase_X = { 0, 0 };
-  double mVideoFramePerSecond_lf = 0.0;
+  AVRational mVidDecFrameRate_X = { 0, 0 };  //or av_make_q
+  AVRational mVidDecTimeBase_X = { 0, 0 };
+  double mVidDecFramePerSecond_lf = 0.0;
 
-  uint64_t mNbVideoPacketSent_U64 = 0;
-  uint64_t mNbVideoFrameReceived_U64 = 0;
-  uint64_t mNbTotalVideoFrame_U64 = 0;
+  uint64_t mNbVidDecPacketSent_U64 = 0;
+  uint64_t mNbVidDecFrameReceived_U64 = 0;
+  uint64_t mNbTotalVidDecFrame_U64 = 0;
 
-  const int  mVideoAllocAlignment_i = 32;
-
-  SwsContext *mpVideoSwsImageCtx_X = nullptr;
   SwsContext *mpVideoSwsCtx_X = nullptr;
 
-  AVFilterInOut *mpVideoFilterIn_X = nullptr;
-  AVFilterInOut *mpVideoFilterOut_X = nullptr;
-  AVFilterGraph *mpVideoFltGraph_X = nullptr;
-  AVFilterContext *mpVideoFilterSinkCtx_X = nullptr;
-  AVFilterContext *mpVideoFilterSrcCtx_X = nullptr;
+  AVFilterInOut *mpVidDecFilterIn_X = nullptr;
+  AVFilterInOut *mpVidDecFilterOut_X = nullptr;
+  AVFilterGraph *mpVidDecFltGraph_X = nullptr;
+  AVFilterContext *mpVidDecFilterSinkCtx_X = nullptr;
+  AVFilterContext *mpVidDecFilterSrcCtx_X = nullptr;
+
+  const int  mVidDecAllocAlignment_i = 32;
+
 };
 
 END_BOF2D_NAMESPACE()

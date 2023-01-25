@@ -30,6 +30,12 @@
     <ClCompile Include="bof2d_av_codec.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="bof2d_audio_encoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bof2d_video_encoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FfmpegDecoder.h">
@@ -42,6 +48,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="bof2d_av_codec.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bof2d_audio_encoder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bof2d_video_encoder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
