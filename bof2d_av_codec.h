@@ -143,6 +143,10 @@ private:
   std::unique_ptr<Bof2dAudioDecoder> mpuAudioDecoder;
   std::unique_ptr<Bof2dVideoEncoder> mpuVideoEncoder;
   std::unique_ptr<Bof2dAudioEncoder> mpuAudioEncoder;
+  AVFormatContext *mpDecFormatCtx_X = nullptr;
+  AVPacket mDecPacket_X;
+  int mVidDecStreamIndex_i = -1;
+  int mAudDecStreamIndex_i = -1;
 };
 
 END_BOF2D_NAMESPACE()

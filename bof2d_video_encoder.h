@@ -70,10 +70,13 @@ public:
   Bof2dVideoEncoder();
   virtual ~Bof2dVideoEncoder();
 
-  BOFERR Open(const std::string &_rOutputFile_S, const std::string &_rOption_S);
+  BOFERR Open(const std::string &_rOption_S);
   BOFERR Close();
   BOFERR BeginWrite(BOF2D_VID_DEC_OUT &_rVidDecOut_X);
   BOFERR EndWrite();
+
+  bool IsVideoStreamPresent();
+  void GetVideoWriteFlag(bool &_rBusy_B, bool &_rPending_B);
 
 private:
   BOFERR CreateFileOut();
@@ -83,6 +86,7 @@ private:
 
   std::atomic<bool> mEncoderReady_B = false;
   std::atomic<bool> mWriteBusy_B = false;
+  std::atomic<bool> mWritePending_B = false;
   std::vector<BOF::BOFPARAMETER> mVidEncOptionParam_X;
   BOF2D_VID_ENC_OPTION mVidEncOption_X;
   std::vector<BOF2D_VID_ENC_OUT> mIoCollection;

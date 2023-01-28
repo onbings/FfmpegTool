@@ -38,7 +38,7 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OPTION
 {
   uint32_t Width_U32;
   uint32_t Height_U32;
-  uint32_t Bps_U32;
+  uint32_t NbBitPerSample_U32;
 
   BOF2D_VID_DEC_OPTION()
   {
@@ -49,7 +49,7 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OPTION
   {
     Width_U32 = 0;
     Height_U32 = 0;
-    Bps_U32 = 0;
+    NbBitPerSample_U32 = 0;
   }
 };
 class BOF2D_EXPORT Bof2dVideoDecoder
@@ -58,32 +58,33 @@ public:
   Bof2dVideoDecoder();
   virtual ~Bof2dVideoDecoder();
 
-  BOFERR Open(const std::string &_rInputFile_S, const std::string &_rOption_S);
+  BOFERR Open(AVFormatContext *_pDecFormatCtx_X, const std::string &_rVidDecOption_S, int &_rAudDecStreamIndex_i);
   BOFERR Close();
-  BOFERR BeginRead(BOF2D_VID_DEC_OUT &_rVidDecOut_X);
+  BOFERR BeginRead(AVPacket *_pDecPacket_X, BOF2D_VID_DEC_OUT &_rVidDecOut_X);
   BOFERR EndRead();
 
   bool IsVideoStreamPresent();
+  void GetVideoReadFlag(bool &_rBusy_B, bool &_rPending_B);
 
 private:
-  BOFERR ConvertVideo();
+  BOFERR ConvertVideo(uint32_t &_rTotalSizeOfVideoConverted_U32);
 
   std::atomic<bool> mDecoderReady_B = false;
   std::atomic<bool> mReadBusy_B = false;
+  std::atomic<bool> mReadPending_B = false;
   std::vector<BOF::BOFPARAMETER> mVidDecOptionParam_X;
   BOF2D_VID_DEC_OPTION mVidDecOption_X;
-  AVPacket mVidDecPacket_X;
+  int mVidDecStreamIndex_i = -1;
+
   BOF2D_VID_DEC_OUT mVidDecOut_X;
   enum AVPixelFormat mPixelFmt_E = AV_PIX_FMT_NONE;
 
   //std::string mOutputCodec_S;
-  AVFormatContext *mpVidDecFormatCtx_X = nullptr;
-  int mVideoStreamIndex_i = -1;
   const AVCodecParameters *mpVidDecCodecParam_X = nullptr;
   const AVCodec *mpVidDecCodec_X = nullptr;
   AVCodecContext *mpVidDecCodecCtx_X = nullptr;
   AVFrame *mpVidDecFrame_X = nullptr;
-  AVFrame *mpVidDecDestFrame_X = nullptr;
+  AVFrame *mpVidDecFrameConverted_X = nullptr;
   AVFrame *mpVidDecFrameFiltered_X = nullptr;
 
   AVColorPrimaries mVidDecColorPrimaries_E = AVColorPrimaries::AVCOL_PRI_RESERVED;
@@ -93,7 +94,7 @@ private:
 
   AVPixelFormat mVidDecInPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
   AVPixelFormat mVidDecVideoOutPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
-  AVPixelFormat mVidDecRgbPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
+  // replaced by mPixelFmt_E AVPixelFormat mVidDecRgbPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
 
   bool mIsVideoInterlaced_B = false;
   AVRational mVidDecFrameRate_X = { 0, 0 };  //or av_make_q
@@ -104,7 +105,7 @@ private:
   uint64_t mNbVidDecFrameReceived_U64 = 0;
   uint64_t mNbTotalVidDecFrame_U64 = 0;
 
-  SwsContext *mpVideoSwsCtx_X = nullptr;
+  SwsContext *mpVidDecSwsCtx_X = nullptr;
 
   AVFilterInOut *mpVidDecFilterIn_X = nullptr;
   AVFilterInOut *mpVidDecFilterOut_X = nullptr;
@@ -113,7 +114,6 @@ private:
   AVFilterContext *mpVidDecFilterSrcCtx_X = nullptr;
 
   const int  mVidDecAllocAlignment_i = 32;
-
 };
 
 END_BOF2D_NAMESPACE()

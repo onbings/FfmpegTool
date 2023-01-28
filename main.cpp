@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
 {
 	BOF2D::BOF2D_VID_DEC_OUT VidDecOut_X;
 	BOF2D::BOF2D_AUD_DEC_OUT AudDecOut_X;
-	uint64_t FrameCounter_U64;
+	uint64_t VideoFrameCounter_U64, AudioFrameCounter_U64;
 
 //	char *pMemoryLeak_c = new char[128];
 	//printf("pMemoryLeak_c %p\n", pMemoryLeak_c);
@@ -18,46 +18,74 @@ int main(int argc, char *argv[])
 	//ExtractAudio("C:\\tmp\\sample-15s.mp3", "C:\\tmp\\audio.wav");
 
 	BOFERR Sts_E;
-	int16_t *pData_S16;
+	int16_t *pAudioData_S16;
+	uint32_t *pVideoData_U32;
+	bool EncodeData_B;
 	BOF2D::Bof2dAvCodec AvCodec;
 	//Sts_E = AvCodec.Open("C:/tmp/sample-mp4-file.mp4", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV;--A_DEMUX");
 //	Sts_E = AvCodec.Open("C:/tmp/sample-15s.mp3", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV");
 //  Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV;--A_DEMUX;--A_SPLIT");
 //	Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV;--A_DEMUX");
-	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", "--V_WIDTH=160;V_HEIGHT=120;V_BPS=24", "--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
+	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", "--V_WIDTH=160;--V_HEIGHT=120;--V_BPS=24", "--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
 	//Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
 	if (Sts_E == BOF_ERR_NO_ERROR)
 	{
-		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, BOF2D::BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP, BOF2D::BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_WAV, "--V_BASEFN=C:/tmp/VideoOut;--V_FMT=BMP", "--A_BASEFN=C:/tmp/AudioOut;--A_FMT=WAV");
+		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, BOF2D::BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP, BOF2D::BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_WAV, "--V_BASEFN=C:/tmp/VideoOut;--V_FMT=BMP", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=2;--A_FMT=WAV");
 		if (Sts_E == BOF_ERR_NO_ERROR)
 		{
 			//	Sts_E = AvCodec.Open("C:\\tmp\\sample-15s.mp3");
 			//goto l;
-			FrameCounter_U64 = 0;
+			VideoFrameCounter_U64 = 0;
+			AudioFrameCounter_U64 = 0;
 			do
 			{
+				EncodeData_B = false;
 				Sts_E = AvCodec.BeginRead(VidDecOut_X, AudDecOut_X);
 				if (Sts_E == BOF_ERR_NO_ERROR)
 				{
-					FrameCounter_U64++;
-					pData_S16 = (int16_t *)AudDecOut_X.InterleavedData_X.pData_U8;
-					BOF_ASSERT(pData_S16);
-					if (pData_S16)
+					if (VidDecOut_X.Data_X.Size_U64)
 					{
-						printf("%06zd: Got Audio %zx/%zx:%p nbs %d ch %d layout %zx Rate %d\n", FrameCounter_U64, AudDecOut_X.InterleavedData_X.Size_U64, AudDecOut_X.InterleavedData_X.Capacity_U64, AudDecOut_X.InterleavedData_X.pData_U8,
-							AudDecOut_X.NbSample_U32, AudDecOut_X.NbChannel_U32, AudDecOut_X.ChannelLayout_U64, AudDecOut_X.SampleRateInHz_U32);
-						printf("        Got Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pData_S16[0], pData_S16[1], pData_S16[2], pData_S16[3], pData_S16[4], pData_S16[5], pData_S16[6], pData_S16[7]);
+						VideoFrameCounter_U64++;
+						EncodeData_B = true;
 
-						Sts_E = AvCodec.EndRead();
-						Sts_E = AvCodec.BeginWrite(VidDecOut_X, AudDecOut_X);
-						Sts_E = AvCodec.EndWrite();
-						if (FrameCounter_U64 > 512)
+						pVideoData_U32 = (uint32_t *)VidDecOut_X.Data_X.pData_U8;
+						BOF_ASSERT(pVideoData_U32 != nullptr);
+						if (pVideoData_U32)
 						{
-							break;
+							printf("%06zd: Got Video %zx/%zx:%p Ls %d %dx%d\n", VideoFrameCounter_U64, VidDecOut_X.Data_X.Size_U64, VidDecOut_X.Data_X.Capacity_U64, VidDecOut_X.Data_X.pData_U8,
+								VidDecOut_X.LineSize_S32, VidDecOut_X.Size_X.Width_U32, VidDecOut_X.Size_X.Height_U32);
+							printf("        Got Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pVideoData_U32[0], pVideoData_U32[1], pVideoData_U32[2], pVideoData_U32[3], pVideoData_U32[4], pVideoData_U32[5], pVideoData_U32[6], pVideoData_U32[7]);
 						}
 					}
+					if (AudDecOut_X.InterleavedData_X.Size_U64)
+					{
+						AudioFrameCounter_U64++;
+						EncodeData_B = true;
+
+						pAudioData_S16 = (int16_t *)AudDecOut_X.InterleavedData_X.pData_U8;
+						BOF_ASSERT(pAudioData_S16 != nullptr);
+						if (pAudioData_S16)
+						{
+							printf("%06zd: Got Audio %zx/%zx:%p nbs %d ch %d layout %zx Rate %d\n", AudioFrameCounter_U64, AudDecOut_X.InterleavedData_X.Size_U64, AudDecOut_X.InterleavedData_X.Capacity_U64, AudDecOut_X.InterleavedData_X.pData_U8,
+								AudDecOut_X.NbSample_U32, AudDecOut_X.NbChannel_U32, AudDecOut_X.ChannelLayout_U64, AudDecOut_X.SampleRateInHz_U32);
+							printf("        Got Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pAudioData_S16[0], pAudioData_S16[1], pAudioData_S16[2], pAudioData_S16[3], pAudioData_S16[4], pAudioData_S16[5], pAudioData_S16[6], pAudioData_S16[7]);
+						}
+					}
+					if (EncodeData_B)
+					{
+						Sts_E = AvCodec.BeginWrite(VidDecOut_X, AudDecOut_X);
+						Sts_E = AvCodec.EndWrite();
+					}
+					Sts_E = AvCodec.EndRead();
+				
+					if ((VideoFrameCounter_U64 > 512) || (AudioFrameCounter_U64 > 512))
+					{
+						break;
+					}
 				}
-			} while (Sts_E == BOF_ERR_NO_ERROR);
+			}
+			while (Sts_E == BOF_ERR_NO_ERROR);
+
 			//l:
 			printf("Exit with '%s'\n", BOF::Bof_ErrorCode(Sts_E));
 			AvCodec.CloseEncoder();

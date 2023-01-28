@@ -74,133 +74,126 @@ Bof2dAudioDecoder::~Bof2dAudioDecoder()
   Close();
 }
 
-BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::string &_rOption_S)
+BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::string &_rVidDecOption_S, int &_rAudDecStreamIndex_i)
 {
-  BOFERR    Rts_E;
+  BOFERR    Rts_E = BOF_ERR_EINVAL;
   int       Sts_i;
   uint32_t  i_U32, NbMaxAudioSamplePerChannel_U32, MaxAudioBufferSize_U32;
-  uint8_t   *pAudDecBuffer_U8;
+  uint8_t *pAudDecBuffer_U8;
   BOF::BofCommandLineParser OptionParser;
   BOF::BOF_BUFFER AudDecBuffer_X;
 
-  if (mDecoderReady_B == false)
+  _rAudDecStreamIndex_i = -1;
+  if (_pDecFormatCtx_X)
   {
-    Close();
-
-    mAudDecOption_X.Reset();
-    Rts_E = OptionParser.ToByte(_rOption_S, mAudDecOptionParam_X, nullptr, nullptr);
-    if (Rts_E == BOF_ERR_NO_ERROR)
+    Rts_E = BOF_ERR_ALREADY_OPENED;
+    if (mDecoderReady_B == false)
     {
-      if (mAudDecOption_X.NbBitPerSample_U32 == 8)
-      {
-        mSampleFmt_E = AV_SAMPLE_FMT_U8;
-      }
-      else if (mAudDecOption_X.NbBitPerSample_U32 == 16)
-      {
-        mSampleFmt_E = AV_SAMPLE_FMT_S16;
-      }
-      else if (mAudDecOption_X.NbBitPerSample_U32 == 24)
-      {
-        mSampleFmt_E = AV_SAMPLE_FMT_S32;
-      }
-      else
-      {
-        mSampleFmt_E = AV_SAMPLE_FMT_FLT;
-      }
+      Close();
 
-
-      // Open media file.
-      Sts_i = avformat_open_input(&mpAudDecFormatCtx_X, _rInputFile_S.c_str(), nullptr, nullptr);
-      FFMPEG_CHK_IF_ERR(Sts_i, "Couldn't open file " + _rInputFile_S, Rts_E);
+      mAudDecOption_X.Reset();
+      Rts_E = OptionParser.ToByte(_rVidDecOption_S, mAudDecOptionParam_X, nullptr, nullptr);
       if (Rts_E == BOF_ERR_NO_ERROR)
       {
-        /* Retrieve stream information */
-        Sts_i = avformat_find_stream_info(mpAudDecFormatCtx_X, nullptr);
-        FFMPEG_CHK_IF_ERR(Sts_i, "Couldn't find stream information in " + _rInputFile_S, Rts_E);
-        if (Rts_E == BOF_ERR_NO_ERROR)
+        if (mAudDecOption_X.NbBitPerSample_U32 == 8)
         {
-          for (i_U32 = 0; i_U32 < mpAudDecFormatCtx_X->nb_streams; i_U32++)
+          mSampleFmt_E = AV_SAMPLE_FMT_U8;
+        }
+        else if (mAudDecOption_X.NbBitPerSample_U32 == 16)
+        {
+          mSampleFmt_E = AV_SAMPLE_FMT_S16;
+        }
+        else if (mAudDecOption_X.NbBitPerSample_U32 == 24)
+        {
+          mSampleFmt_E = AV_SAMPLE_FMT_S32;
+        }
+        else
+        {
+          mSampleFmt_E = AV_SAMPLE_FMT_FLT;
+        }
+
+        for (i_U32 = 0; i_U32 < _pDecFormatCtx_X->nb_streams; i_U32++)
+        {
+          if (_pDecFormatCtx_X->streams[i_U32]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
           {
-            if (mpAudDecFormatCtx_X->streams[i_U32]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
-            {
-              mpAudDecCodecParam_X = mpAudDecFormatCtx_X->streams[i_U32]->codecpar;
-              break;
-            }
+            mpAudDecCodecParam_X = _pDecFormatCtx_X->streams[i_U32]->codecpar;
+            break;
           }
-          if (mpAudDecCodecParam_X == nullptr)
+        }
+        if (mpAudDecCodecParam_X == nullptr)
+        {
+          FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "No audio stream present", Rts_E);
+        }
+        else
+        {
+          mAudDecStreamIndex_i = i_U32;
+          _rAudDecStreamIndex_i = mAudDecStreamIndex_i;
+          //av_dict_set(&opts, "b", "2.5M", 0);
+          mpAudDecCodec_X = avcodec_find_decoder(mpAudDecCodecParam_X->codec_id);
+          if (mpAudDecCodec_X == nullptr)
           {
-            FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "No audio stream in " + _rInputFile_S, Rts_E);
+            FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "Could not find decoder for codec " + std::to_string(mpAudDecCodecParam_X->codec_id), Rts_E);
           }
           else
           {
-            mAudioStreamIndex_i = i_U32;
-            //av_dict_set(&opts, "b", "2.5M", 0);
-            mpAudDecCodec_X = avcodec_find_decoder(mpAudDecCodecParam_X->codec_id);
-            if (mpAudDecCodec_X == nullptr)
+            mpAudDecCodecCtx_X = avcodec_alloc_context3(mpAudDecCodec_X);
+            if (mpAudDecCodecCtx_X == nullptr)
             {
-              FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "Could not find decoder for codec " + std::to_string(mpAudDecCodecParam_X->codec_id), Rts_E);
+              FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not avcodec_alloc_context3 for codec " + std::to_string(mpAudDecCodecParam_X->codec_id), Rts_E);
             }
             else
             {
-              mpAudDecCodecCtx_X = avcodec_alloc_context3(mpAudDecCodec_X);
-              if (mpAudDecCodecCtx_X == nullptr)
+              Sts_i = avcodec_parameters_to_context(mpAudDecCodecCtx_X, mpAudDecCodecParam_X);
+              FFMPEG_CHK_IF_ERR(Sts_i, "Error in avcodec_parameters_to_context", Rts_E);
+              if (Rts_E == BOF_ERR_NO_ERROR)
               {
-                FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not avcodec_alloc_context3 for codec " + std::to_string(mpAudDecCodecParam_X->codec_id), Rts_E);
-              }
-              else
-              {
-                Sts_i = avcodec_parameters_to_context(mpAudDecCodecCtx_X, mpAudDecCodecParam_X);
-                FFMPEG_CHK_IF_ERR(Sts_i, "Error in avcodec_parameters_to_context", Rts_E);
+                mpAudDecCodecCtx_X->thread_count = 4;
+                Sts_i = avcodec_open2(mpAudDecCodecCtx_X, mpAudDecCodec_X, nullptr);
+                FFMPEG_CHK_IF_ERR(Sts_i, "Could not avcodec_open2", Rts_E);
                 if (Rts_E == BOF_ERR_NO_ERROR)
                 {
-                  mpAudDecCodecCtx_X->thread_count = 4;
-                  Sts_i = avcodec_open2(mpAudDecCodecCtx_X, mpAudDecCodec_X, nullptr);
-                  FFMPEG_CHK_IF_ERR(Sts_i, "Could not avcodec_open2", Rts_E);
-                  if (Rts_E == BOF_ERR_NO_ERROR)
+                  mpAudDecFrame_X = av_frame_alloc();
+                  if (mpAudDecFrame_X == nullptr)
                   {
-                    mpAudDecFrame_X = av_frame_alloc();
-                    if (mpAudDecFrame_X == nullptr)
+                    FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpAudDecFrame_X", Rts_E);
+                  }
+                  else
+                  {
+                    mpAudDecFrameConverted_X = av_frame_alloc();
+                    if (mpAudDecFrameConverted_X == nullptr)
                     {
-                      FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpFrame_X", Rts_E);
+                      FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpAudDecFrameConverted_X", Rts_E);
                     }
                     else
                     {
-                      mpAudDecFrameConverted_X = av_frame_alloc();
-                      if (mpAudDecFrameConverted_X == nullptr)
+                      //Allocate global audio decoder buffer
+                      NbMaxAudioSamplePerChannel_U32 = 0x4000;  //Just as a starting point
+                      MaxAudioBufferSize_U32 = 0x1000 + av_samples_get_buffer_size(nullptr, mAudDecOption_X.NbChannel_U32, NbMaxAudioSamplePerChannel_U32, mSampleFmt_E, 0); //0x1000 Security and protection for the division later in the code
+                      pAudDecBuffer_U8 = (uint8_t *)av_malloc(MaxAudioBufferSize_U32);
+                      if (pAudDecBuffer_U8 == nullptr)
                       {
-                        FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpAudDecFrameConverted_X", Rts_E);
+                        FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc global audio", Rts_E);
                       }
                       else
                       {
-                        //Allocate global audio decoder buffer
-                        NbMaxAudioSamplePerChannel_U32 = 0x4000;  //Just as a starting point
-                        MaxAudioBufferSize_U32 = 0x1000 + av_samples_get_buffer_size(nullptr, mAudDecOption_X.NbChannel_U32, NbMaxAudioSamplePerChannel_U32, mSampleFmt_E, 0); //0x1000 Security and protection for the division later in the code
-                        pAudDecBuffer_U8 = (uint8_t *)av_malloc(MaxAudioBufferSize_U32);
-                        if (pAudDecBuffer_U8 == nullptr)
+                        //Store global audio decoder buffer characteristics
+                        mAudDecOut_X.InterleavedData_X.SetStorage(MaxAudioBufferSize_U32, 0, pAudDecBuffer_U8);
+                        if (mAudDecOption_X.DemuxChannel_B)
                         {
-                          FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc global audio", Rts_E);
-                        }
-                        else
-                        {
-                          //Store global audio decoder buffer characteristics
-                          mAudDecOut_X.InterleavedData_X.SetStorage(MaxAudioBufferSize_U32, 0, pAudDecBuffer_U8);
-                          if (mAudDecOption_X.DemuxChannel_B)
+                          //Allocate and store per channel audio decoder buffer characteristics
+                          MaxAudioBufferSize_U32 /= (mAudDecOption_X.NbChannel_U32 ? mAudDecOption_X.NbChannel_U32 : 1);
+                          for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
                           {
-                            //Allocate and store per channel audio decoder buffer characteristics
-                            MaxAudioBufferSize_U32 /= (mAudDecOption_X.NbChannel_U32 ? mAudDecOption_X.NbChannel_U32 : 1);
-                            for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
+                            AudDecBuffer_X.Reset();
+                            pAudDecBuffer_U8 = new uint8_t[MaxAudioBufferSize_U32];
+                            if (pAudDecBuffer_U8 == nullptr)
                             {
-                              AudDecBuffer_X.Reset();
-                              pAudDecBuffer_U8 = new uint8_t[MaxAudioBufferSize_U32];
-                              if (pAudDecBuffer_U8 == nullptr)
-                              {
-                                FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc channel audio", Rts_E);
-                              }
-                              else
-                              {
-                                AudDecBuffer_X.SetStorage(MaxAudioBufferSize_U32, 0, pAudDecBuffer_U8);
-                                mAudDecOut_X.ChannelBufferCollection.push_back(AudDecBuffer_X);
-                              }
+                              FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc channel audio", Rts_E);
+                            }
+                            else
+                            {
+                              AudDecBuffer_X.SetStorage(MaxAudioBufferSize_U32, 0, pAudDecBuffer_U8);
+                              mAudDecOut_X.ChannelBufferCollection.push_back(AudDecBuffer_X);
                             }
                           }
                         }
@@ -212,57 +205,57 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
             }
           }
         }
-      }
 
-      if (Rts_E == BOF_ERR_NO_ERROR)
-      {
-        mAudDecTimeBase_X = mpAudDecFormatCtx_X->streams[mAudioStreamIndex_i]->time_base;
+        if (Rts_E == BOF_ERR_NO_ERROR)
+        {
+          mAudDecTimeBase_X = _pDecFormatCtx_X->streams[mAudDecStreamIndex_i]->time_base;
 
-        /* prepare resampler */
-        mpAudDecSwrCtx_X = swr_alloc();
-        if (mpAudDecSwrCtx_X == nullptr)
-        {
-          FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not swr_alloc", Rts_E);
-        }
-        else
-        {
-          Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "in_channel_count", mpAudDecCodecCtx_X->channels, 0);
-          FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_channel_count", Rts_E);
-          if (Rts_E == BOF_ERR_NO_ERROR)
+          /* prepare resampler */
+          mpAudDecSwrCtx_X = swr_alloc();
+          if (mpAudDecSwrCtx_X == nullptr)
           {
-            Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "out_channel_count", mAudDecOption_X.NbChannel_U32, 0);
-            FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_channel_count", Rts_E);
+            FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not swr_alloc", Rts_E);
+          }
+          else
+          {
+            Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "in_channel_count", mpAudDecCodecCtx_X->channels, 0);
+            FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_channel_count", Rts_E);
             if (Rts_E == BOF_ERR_NO_ERROR)
             {
-              Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "in_channel_layout", mpAudDecCodecCtx_X->channel_layout, 0);
-              FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_channel_layout", Rts_E);
+              Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "out_channel_count", mAudDecOption_X.NbChannel_U32, 0);
+              FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_channel_count", Rts_E);
               if (Rts_E == BOF_ERR_NO_ERROR)
               {
-                Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "out_channel_layout", mAudDecOption_X.ChannelLayout_U64, 0);
-                FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_channel_layout", Rts_E);
+                Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "in_channel_layout", mpAudDecCodecCtx_X->channel_layout, 0);
+                FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_channel_layout", Rts_E);
                 if (Rts_E == BOF_ERR_NO_ERROR)
                 {
-                  Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "in_sample_rate", mpAudDecCodecCtx_X->sample_rate, 0);
-                  FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_sample_rate", Rts_E);
+                  Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "out_channel_layout", mAudDecOption_X.ChannelLayout_U64, 0);
+                  FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_channel_layout", Rts_E);
                   if (Rts_E == BOF_ERR_NO_ERROR)
                   {
-                    Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "out_sample_rate", mAudDecOption_X.SampleRateInHz_U32, 0);
-                    FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_sample_rate", Rts_E);
+                    Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "in_sample_rate", mpAudDecCodecCtx_X->sample_rate, 0);
+                    FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_sample_rate", Rts_E);
                     if (Rts_E == BOF_ERR_NO_ERROR)
                     {
-                      Sts_i = av_opt_set_sample_fmt(mpAudDecSwrCtx_X, "in_sample_fmt", mpAudDecCodecCtx_X->sample_fmt, 0);
-                      FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_sample_fmt", Rts_E);
+                      Sts_i = av_opt_set_int(mpAudDecSwrCtx_X, "out_sample_rate", mAudDecOption_X.SampleRateInHz_U32, 0);
+                      FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_sample_rate", Rts_E);
                       if (Rts_E == BOF_ERR_NO_ERROR)
                       {
-                        Sts_i = av_opt_set_sample_fmt(mpAudDecSwrCtx_X, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
-                        FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_sample_fmt", Rts_E);
+                        Sts_i = av_opt_set_sample_fmt(mpAudDecSwrCtx_X, "in_sample_fmt", mpAudDecCodecCtx_X->sample_fmt, 0);
+                        FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_sample_fmt", Rts_E);
                         if (Rts_E == BOF_ERR_NO_ERROR)
                         {
-                          Sts_i = swr_init(mpAudDecSwrCtx_X);
-                          FFMPEG_CHK_IF_ERR(Sts_i, "Could not swr_init", Rts_E);
+                          Sts_i = av_opt_set_sample_fmt(mpAudDecSwrCtx_X, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
+                          FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_sample_fmt", Rts_E);
                           if (Rts_E == BOF_ERR_NO_ERROR)
                           {
-                            mDecoderReady_B = true;
+                            Sts_i = swr_init(mpAudDecSwrCtx_X);
+                            FFMPEG_CHK_IF_ERR(Sts_i, "Could not swr_init", Rts_E);
+                            if (Rts_E == BOF_ERR_NO_ERROR)
+                            {
+                              mDecoderReady_B = true;
+                            }
                           }
                         }
                       }
@@ -273,11 +266,11 @@ BOFERR Bof2dAudioDecoder::Open(const std::string &_rInputFile_S, const std::stri
             }
           }
         }
-      }
 
-      if (Rts_E != BOF_ERR_NO_ERROR)
-      {
-        Close();
+        if (Rts_E != BOF_ERR_NO_ERROR)
+        {
+          Close();
+        }
       }
     }
   }
@@ -292,8 +285,7 @@ BOFERR Bof2dAudioDecoder::Close()
   swr_free(&mpAudDecSwrCtx_X);
   if (mpAudDecFrame_X)
   {
-    //If we have used mpAudDecBuffer_U8 via the Begin/EndRead method we check that here that buffer in mpAudDecFrameConverted_X
-    //is the same than mpAudDecBuffer_U8. In this case we do not call av_freep(&mpAudDecBuffer_U8); and set mpAudDecBuffer_U8 to nullptr
+    //If we have used Begin/EndRead method we check that here that the buffer in mpVidDecFrameConverted_X is the same than mpVidDecFrameConverted_X->data[0]. 
     if (mpAudDecFrameConverted_X->data[0] == mAudDecOut_X.InterleavedData_X.pData_U8)
     {
       mAudDecOut_X.InterleavedData_X.Reset();
@@ -304,7 +296,7 @@ BOFERR Bof2dAudioDecoder::Close()
   }
   if (!AudioBufferHasBeenFreeed_B)
   {
-    //If we just open/close decoder without calling read we need to free mpAudDecBuffer_U8 here
+    //If we just open/close decoder without calling read we need to free mAudDecOut_X.InterleavedData_X.pData_U8 here (see remark above)
     av_freep(&mAudDecOut_X.InterleavedData_X.pData_U8);
     mAudDecOut_X.InterleavedData_X.Reset();
   }
@@ -317,7 +309,6 @@ BOFERR Bof2dAudioDecoder::Close()
   //avcodec_close(mpAudDecCodecCtx_X);
   avcodec_free_context(&mpAudDecCodecCtx_X);
 
-  avformat_close_input(&mpAudDecFormatCtx_X);
 
   for (auto &rIt : mAudDecOut_X.ChannelBufferCollection)
   {
@@ -326,11 +317,11 @@ BOFERR Bof2dAudioDecoder::Close()
 
   mDecoderReady_B = false;
   mReadBusy_B = false;
+  mReadPending_B = false;
   mAudDecOption_X.Reset();
 
   // mAudDecPacket_X;
-  mpAudDecFormatCtx_X = nullptr;
-  mAudioStreamIndex_i = -1;
+  mAudDecStreamIndex_i = -1;
   mpAudDecCodecParam_X = nullptr;
   mpAudDecCodec_X = nullptr;
   mpAudDecCodecCtx_X = nullptr;
@@ -350,7 +341,7 @@ BOFERR Bof2dAudioDecoder::Close()
   return Rts_E;
 }
 
-BOFERR Bof2dAudioDecoder::BeginRead(BOF2D_AUD_DEC_OUT &_rAudDecOut_X)
+BOFERR Bof2dAudioDecoder::BeginRead(AVPacket *_pDecPacket_X, BOF2D_AUD_DEC_OUT &_rAudDecOut_X)
 {
   BOFERR Rts_E = BOF_ERR_EOF;
   int Sts_i;
@@ -366,121 +357,119 @@ BOFERR Bof2dAudioDecoder::BeginRead(BOF2D_AUD_DEC_OUT &_rAudDecOut_X)
     else
     {
       mReadBusy_B = true;
-      Rts_E = BOF_ERR_NO_ERROR;
       mAudDecOut_X.InterleavedData_X.Size_U64 = 0;
       for (auto &rIt : mAudDecOut_X.ChannelBufferCollection)
       {
         rIt.Size_U64 = 0;
       }
-      while (Rts_E == BOF_ERR_NO_ERROR)
+      Rts_E = BOF_ERR_INDEX;
+      if ((_pDecPacket_X) && (_pDecPacket_X->stream_index == mAudDecStreamIndex_i))
       {
-        Sts_i = av_read_frame(mpAudDecFormatCtx_X, &mAudDecPacket_X);
-        FFMPEG_CHK_IF_ERR(Sts_i, "Cannot av_read_frame Audio", Rts_E);
+        Sts_i = avcodec_send_packet(mpAudDecCodecCtx_X, _pDecPacket_X);
+        FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_send_packet Audio", Rts_E);
         if (Rts_E == BOF_ERR_NO_ERROR)
         {
-          if (mAudDecPacket_X.stream_index == mAudioStreamIndex_i)
+          mNbAudDecPacketSent_U64++;
+          Sts_i = avcodec_receive_frame(mpAudDecCodecCtx_X, mpAudDecFrame_X);
+          FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_receive_frame Audio", Rts_E);
+          if (Rts_E == BOF_ERR_NO_ERROR)
           {
-            Sts_i = avcodec_send_packet(mpAudDecCodecCtx_X, &mAudDecPacket_X);
-            FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_send_packet Audio", Rts_E);
+            mNbAudDecFrameReceived_U64++;
+            printf("AudioFrame Snt/Rcv %zd/%zd Pts %zd Fmt %s NbSmp %d Rate %d Buf %x:%p Layout %zx\n", mNbAudDecPacketSent_U64, mNbAudDecFrameReceived_U64, mpAudDecFrame_X->pts, av_get_sample_fmt_name((AVSampleFormat)mpAudDecFrame_X->format),
+              mpAudDecFrame_X->nb_samples, mpAudDecFrame_X->sample_rate, mpAudDecFrame_X->linesize[0], mpAudDecFrame_X->data[0],
+              mpAudDecFrame_X->channel_layout);
 
+            //Rts_E = ConvertAudio(false, mpAudDecFrame_X, mpAudDecFrameConverted_X, mAudDecOption_X.NbChannel_U32, static_cast<uint32_t>(mAudDecOption_X.ChannelLayout_U64), mAudDecOption_X.SampleRateInHz_U32, AV_SAMPLE_FMT_S16);
+            Rts_E = ConvertAudio(NbAudioSampleConvertedPerChannel_U32);
             if (Rts_E == BOF_ERR_NO_ERROR)
             {
-              mNbAudDecPacketSent_U64++;
-              Sts_i = avcodec_receive_frame(mpAudDecCodecCtx_X, mpAudDecFrame_X);
-              FFMPEG_CHK_IF_ERR(Sts_i, "Cannot avcodec_receive_frame Audio", Rts_E);
-              if (Rts_E == BOF_ERR_NO_ERROR)
+              TotalSizeOfAudioConvertedPerChannel_U32 = (NbAudioSampleConvertedPerChannel_U32 * mAudDecOption_X.NbBitPerSample_U32) / 8;
+              TotalSizeOfAudioConverted_U32 = TotalSizeOfAudioConvertedPerChannel_U32 * mAudDecOption_X.NbChannel_U32;
+              mAudDecOut_X.InterleavedData_X.Size_U64 = TotalSizeOfAudioConverted_U32;
+              for (auto &rIt : mAudDecOut_X.ChannelBufferCollection)
               {
-                mNbAudDecFrameReceived_U64++;
-                printf("AudioFrame Snt/Rcv %zd/%zd Pts %zd Fmt %s NbSmp %d Rate %d Buf %x:%p Layout %zx\n", mNbAudDecPacketSent_U64, mNbAudDecFrameReceived_U64, mpAudDecFrame_X->pts, av_get_sample_fmt_name((AVSampleFormat)mpAudDecFrame_X->format),
-                  mpAudDecFrame_X->nb_samples, mpAudDecFrame_X->sample_rate, mpAudDecFrame_X->linesize[0], mpAudDecFrame_X->data[0],
-                  mpAudDecFrame_X->channel_layout);
+                rIt.Size_U64 = TotalSizeOfAudioConvertedPerChannel_U32;
+              }
+              //_rAudDecOut_X.InterleavedData_X.SetStorage(mpAudDecFrameConverted_X->linesize[0], TotalSizeOfAudioConverted_U32, mpAudDecFrameConverted_X->data[0]);
+              _rAudDecOut_X.InterleavedData_X = mAudDecOut_X.InterleavedData_X;
+              _rAudDecOut_X.ChannelBufferCollection = mAudDecOut_X.ChannelBufferCollection;
+              _rAudDecOut_X.NbSample_U32 = mpAudDecFrameConverted_X->nb_samples;
+              _rAudDecOut_X.NbChannel_U32 = mpAudDecFrameConverted_X->channels;
+              _rAudDecOut_X.ChannelLayout_U64 = mpAudDecFrameConverted_X->channel_layout;
+              _rAudDecOut_X.SampleRateInHz_U32 = mpAudDecFrameConverted_X->sample_rate;
+              _rAudDecOut_X.NbBitPerSample_U32 = mAudDecOption_X.NbBitPerSample_U32;
 
-                //Rts_E = ConvertAudio(false, mpAudDecFrame_X, mpAudDecFrameConverted_X, mAudDecOption_X.NbChannel_U32, static_cast<uint32_t>(mAudDecOption_X.ChannelLayout_U64), mAudDecOption_X.SampleRateInHz_U32, AV_SAMPLE_FMT_S16);
-                Rts_E = ConvertAudio(NbAudioSampleConvertedPerChannel_U32);
-                if (Rts_E == BOF_ERR_NO_ERROR)
+              if (mAudDecOption_X.DemuxChannel_B)
+              {
+                if (mAudDecOption_X.NbChannel_U32 == 1)
                 {
-                  TotalSizeOfAudioConvertedPerChannel_U32 = (NbAudioSampleConvertedPerChannel_U32 * mAudDecOption_X.NbBitPerSample_U32) / 8;
-                  TotalSizeOfAudioConverted_U32 = TotalSizeOfAudioConvertedPerChannel_U32 * mAudDecOption_X.NbChannel_U32;
-                  mAudDecOut_X.InterleavedData_X.Size_U64 = TotalSizeOfAudioConverted_U32;
-                  for (auto &rIt : mAudDecOut_X.ChannelBufferCollection)
+                  mAudDecOut_X.ChannelBufferCollection[0].MemCpy(TotalSizeOfAudioConverted_U32, mAudDecOut_X.InterleavedData_X.pData_U8);
+                }
+                else
+                {
+                  switch (mAudDecOption_X.NbBitPerSample_U32)
                   {
-                    rIt.Size_U64 = TotalSizeOfAudioConvertedPerChannel_U32;
-                  }
-                  //_rAudDecOut_X.InterleavedData_X.SetStorage(mpAudDecFrameConverted_X->linesize[0], TotalSizeOfAudioConverted_U32, mpAudDecFrameConverted_X->data[0]);
-                  _rAudDecOut_X.InterleavedData_X = mAudDecOut_X.InterleavedData_X;
-                  _rAudDecOut_X.ChannelBufferCollection = mAudDecOut_X.ChannelBufferCollection;
-                  _rAudDecOut_X.NbSample_U32 = mpAudDecFrameConverted_X->nb_samples;
-                  _rAudDecOut_X.NbChannel_U32 = mpAudDecFrameConverted_X->channels;
-                  _rAudDecOut_X.ChannelLayout_U64 = mpAudDecFrameConverted_X->channel_layout;
-                  _rAudDecOut_X.SampleRateInHz_U32 = mpAudDecFrameConverted_X->sample_rate;
-                  _rAudDecOut_X.NbBitPerSample_U32 = mAudDecOption_X.NbBitPerSample_U32;
-
-                  if (mAudDecOption_X.DemuxChannel_B)
-                  {
-                    if (mAudDecOption_X.NbChannel_U32 == 1)
-                    {
-                      mAudDecOut_X.ChannelBufferCollection[0].MemCpy(TotalSizeOfAudioConverted_U32, mAudDecOut_X.InterleavedData_X.pData_U8);
-                    }
-                    else
-                    {
-                      switch (mAudDecOption_X.NbBitPerSample_U32)
+                    case 8:
+                      for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
                       {
-                        case 8:
-                          for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
-                          {
-                            for (Index_U32 = i_U32, j_U32 = 0; j_U32 < NbAudioSampleConvertedPerChannel_U32; j_U32++, Index_U32+= mAudDecOption_X.NbChannel_U32)
-                            {
-                              ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
-                            }
-                          }
-                          break;
-
-                        case 16:
-                          for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
-                          {
-                            for (Index_U32 = i_U32, j_U32 = 0; j_U32 < NbAudioSampleConvertedPerChannel_U32; j_U32++, Index_U32 += mAudDecOption_X.NbChannel_U32)
-                            {
-                              ((uint16_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32] = ((uint16_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
-                            }
-                          }
-                          break;
-
-                        case 24:  
-                          for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
-                          {
-                            for (Index_U32 = (i_U32 * 3), j_U32 = 0; j_U32 < (NbAudioSampleConvertedPerChannel_U32 * 3); j_U32++, Index_U32 += (mAudDecOption_X.NbChannel_U32 * 3))
-                            {
-                              ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
-                              ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32++];
-                              ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32++];
-                            }
-                          }
-                          break;
-
-                        case 32:
-                          for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
-                          {
-                            for (Index_U32 = i_U32, j_U32 = 0; j_U32 < NbAudioSampleConvertedPerChannel_U32; j_U32++, Index_U32 += mAudDecOption_X.NbChannel_U32)
-                            {
-                              ((uint32_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32] = ((uint32_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
-                            }
-                          }
-                          break;
-
-                        default:
-                          Rts_E = BOF_ERR_NOT_SUPPORTED;
-                          break;
+                        for (Index_U32 = i_U32, j_U32 = 0; j_U32 < NbAudioSampleConvertedPerChannel_U32; j_U32++, Index_U32 += mAudDecOption_X.NbChannel_U32)
+                        {
+                          ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
+                        }
                       }
-                    }
+                      break;
+
+                    case 16:
+                      for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
+                      {
+                        for (Index_U32 = i_U32, j_U32 = 0; j_U32 < NbAudioSampleConvertedPerChannel_U32; j_U32++, Index_U32 += mAudDecOption_X.NbChannel_U32)
+                        {
+                          ((uint16_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32] = ((uint16_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
+                        }
+                      }
+                      break;
+
+                    case 24:
+                      for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
+                      {
+                        for (Index_U32 = (i_U32 * 3), j_U32 = 0; j_U32 < (NbAudioSampleConvertedPerChannel_U32 * 3); j_U32++, Index_U32 += (mAudDecOption_X.NbChannel_U32 * 3))
+                        {
+                          ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
+                          ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32++];
+                          ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32++];
+                        }
+                      }
+                      break;
+
+                    case 32:
+                      for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
+                      {
+                        for (Index_U32 = i_U32, j_U32 = 0; j_U32 < NbAudioSampleConvertedPerChannel_U32; j_U32++, Index_U32 += mAudDecOption_X.NbChannel_U32)
+                        {
+                          ((uint32_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32] = ((uint32_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
+                        }
+                      }
+                      break;
+
+                    default:
+                      Rts_E = BOF_ERR_NOT_SUPPORTED;
+                      break;
                   }
                 }
-                av_packet_unref(&mAudDecPacket_X);
-                break;  //leave while so av_packet_unref(&mAudDecPacket_X);
               }
             }
+            av_packet_unref(_pDecPacket_X);
+            //break;  //leave while so av_packet_unref(&mAudDecPacket_X);
           }
-          av_packet_unref(&mAudDecPacket_X);  //Made in while
         }
+      }
+          
+
+      if (Rts_E == BOF_ERR_EAGAIN)
+      {
+        mReadBusy_B = false;
+        mReadPending_B = true;
+        Rts_E = BOF_ERR_NO_ERROR;
       }
     }
   }
@@ -498,6 +487,7 @@ BOFERR Bof2dAudioDecoder::EndRead()
       av_frame_unref(mpAudDecFrame_X);
 
       mReadBusy_B = false;
+      mReadPending_B = false;
       Rts_E = BOF_ERR_NO_ERROR;
     }
     else
@@ -524,7 +514,7 @@ BOFERR Bof2dAudioDecoder::ConvertAudio(uint32_t &_rNbAudioSampleConvertedPerChan
   if (AudioBufferSize_U32 <= mAudDecOut_X.InterleavedData_X.Capacity_U64)
   {
     Rts_E = BOF_ERR_NO_ERROR;
-    av_samples_fill_arrays(mpAudDecFrameConverted_X->data, mpAudDecFrameConverted_X->linesize, mAudDecOut_X.InterleavedData_X.pData_U8, mAudDecOption_X.NbChannel_U32, NbAudioSample_U32, mSampleFmt_E, 0);
+    av_samples_fill_arrays(mpAudDecFrameConverted_X->data, mpAudDecFrameConverted_X->linesize, mAudDecOut_X.InterleavedData_X.pData_U8, mAudDecOption_X.NbChannel_U32, NbAudioSample_U32, mSampleFmt_E, mAudDecAllocAlignment_i);
     _rNbAudioSampleConvertedPerChannel_U32 = swr_convert(mpAudDecSwrCtx_X, &mAudDecOut_X.InterleavedData_X.pData_U8, NbAudioSample_U32, (const uint8_t **)mpAudDecFrame_X->data, mpAudDecFrame_X->nb_samples);
     ChannelSizeOfAudioConverted_U32 = (_rNbAudioSampleConvertedPerChannel_U32 * mAudDecOption_X.NbBitPerSample_U32) / 8;
     TotalSizeOfAudioConverted_U32 = (ChannelSizeOfAudioConverted_U32 * mAudDecOption_X.NbChannel_U32);
@@ -559,7 +549,13 @@ BOFERR Bof2dAudioDecoder::ConvertAudio(uint32_t &_rNbAudioSampleConvertedPerChan
 
 bool Bof2dAudioDecoder::IsAudioStreamPresent()
 {
-  return(mAudioStreamIndex_i != -1);
+  return(mAudDecStreamIndex_i != -1);
+}
+
+void Bof2dAudioDecoder::GetAudioReadFlag(bool &_rBusy_B, bool &_rPending_B)
+{
+  _rBusy_B = mReadBusy_B;
+  _rPending_B = mReadPending_B;
 }
 
 END_BOF2D_NAMESPACE()

@@ -6,7 +6,7 @@
    IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR
    PURPOSE.
 
-   This module defines the interface to the Ffmpeg audio lib
+   This module defines the interface to the bof2d reader class
 
    Author:      Bernard HARMEL: onbings@gmail.com
    Web:			    onbings.dscloud.me
@@ -64,9 +64,9 @@ public:
   Bof2dAudioDecoder();
   virtual ~Bof2dAudioDecoder();
 
-  BOFERR Open(AVFormatContext *_pDecFormatCtx_X, const std::string &_rAudDecOption_S, int &_rAudDecStreamIndex_i);
+  BOFERR Open(const std::string &_rInputFile_S, const std::string &_rOption_S);
   BOFERR Close();
-  BOFERR BeginRead(AVPacket *_pDecPacket_X, BOF2D_AUD_DEC_OUT &_rAudDecOut_X);
+  BOFERR BeginRead(BOF2D_AUD_DEC_OUT &_rAudDecOut_X);
   BOFERR EndRead();
 
   bool IsAudioStreamPresent();
@@ -80,8 +80,10 @@ private:
   std::atomic<bool> mReadPending_B = false;
   std::vector<BOF::BOFPARAMETER> mAudDecOptionParam_X;
   BOF2D_AUD_DEC_OPTION mAudDecOption_X;
-  int mAudDecStreamIndex_i = -1;
 
+  AVPacket mAudDecPacket_X;
+  AVFormatContext *mpAudDecFormatCtx_X = nullptr;
+  int mAudioStreamIndex_i = -1;
   const AVCodecParameters *mpAudDecCodecParam_X = nullptr;
   const AVCodec *mpAudDecCodec_X = nullptr;
   AVCodecContext *mpAudDecCodecCtx_X = nullptr;

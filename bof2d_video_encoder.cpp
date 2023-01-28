@@ -61,7 +61,7 @@ Bof2dVideoEncoder::~Bof2dVideoEncoder()
   Close();
 }
 
-BOFERR Bof2dVideoEncoder::Open(const std::string &_rOutputFile_S, const std::string &_rOption_S)
+BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S)
 {
   BOFERR    Rts_E = BOF_ERR_ECANCELED;
   BOF::BofCommandLineParser OptionParser;
@@ -106,6 +106,7 @@ BOFERR Bof2dVideoEncoder::Close()
 
   mEncoderReady_B = false;
   mWriteBusy_B = false;
+  mWritePending_B = false;
   mVidEncOption_X.Reset();
   mIoCollection.clear();
   mVidDecOut_X.Reset();
@@ -136,6 +137,12 @@ BOFERR Bof2dVideoEncoder::BeginWrite(BOF2D_VID_DEC_OUT &_rVidDecOut_X)
       mWriteBusy_B = true;
       mVidDecOut_X = _rVidDecOut_X;
       Rts_E = WriteChunkOut();
+      if (Rts_E == BOF_ERR_EAGAIN)
+      {
+        mWriteBusy_B = false;
+        mWritePending_B = true;
+        Rts_E = BOF_ERR_NO_ERROR;
+      }
     }
   }
 
@@ -152,6 +159,7 @@ BOFERR Bof2dVideoEncoder::EndWrite()
     if (mWriteBusy_B)
     {
       mWriteBusy_B = false;
+      mWritePending_B = false;
       Rts_E = BOF_ERR_NO_ERROR;
     }
     else
@@ -167,7 +175,7 @@ BOFERR Bof2dVideoEncoder::CreateFileOut()
   BOFERR Rts_E;
   std::string Extension_S = S_Bof2dAvVideoFormatEnumConverter.ToString(mVidEncOption_X.Format_E);
 
-  Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mVidEncOption_X.BasePath.FullPathNameWithoutExtension(false) + Extension_S, false, mIoCollection[0].Io);
+  Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mVidEncOption_X.BasePath.FullPathNameWithoutExtension(false) + '.' + Extension_S, false, mIoCollection[0].Io);
   if (Rts_E == BOF_ERR_NO_ERROR)
   {
     Rts_E = WriteHeader();
@@ -264,4 +272,14 @@ BOFERR Bof2dVideoEncoder::CloseFileOut()
   return Rts_E;
 }
 
+bool Bof2dVideoEncoder::IsVideoStreamPresent()
+{
+  return mEncoderReady_B;
+}
+
+void Bof2dVideoEncoder::GetVideoWriteFlag(bool &_rBusy_B, bool &_rPending_B)
+{
+  _rBusy_B = mWriteBusy_B;
+  _rPending_B = mWritePending_B;
+}
 END_BOF2D_NAMESPACE()
