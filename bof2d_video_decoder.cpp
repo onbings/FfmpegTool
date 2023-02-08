@@ -24,7 +24,8 @@ Bof2dVideoDecoder::Bof2dVideoDecoder()
 {
   mVidDecOptionParam_X.push_back({ nullptr, "V_WIDTH", "Specifies converted picture width","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mVidDecOption_X.Width_U32, UINT32, 2, 32768) });
   mVidDecOptionParam_X.push_back({ nullptr, "V_HEIGHT", "Specifies converted picture height","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mVidDecOption_X.Height_U32, UINT32, 2, 32768) });
-  mVidDecOptionParam_X.push_back({ nullptr, "V_BPS", "Specifies converted picture bit per pixel","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mVidDecOption_X.NbBitPerSample_U32, UINT32, 1, 64) });
+  mVidDecOptionParam_X.push_back({ nullptr, "V_BPS", "Specifies converted picture bit per pixel","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mVidDecOption_X.NbBitPerPixel_U32, UINT32, 1, 64) });
+  mVidDecOptionParam_X.push_back({ nullptr, "V_THREAD", "Specifies number of thread used by decodeer (affect delay)","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mVidDecOption_X.NbThread_U32, UINT32, 1, 64) });
 }
 Bof2dVideoDecoder::~Bof2dVideoDecoder()
 {
@@ -50,102 +51,118 @@ BOFERR Bof2dVideoDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
   if (_pDecFormatCtx_X)
   {
     Rts_E = BOF_ERR_ALREADY_OPENED;
-    if (mDecoderReady_B == false)
+    if (mVidDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
     Close();
     mVidDecOption_X.Reset();
     Rts_E = OptionParser.ToByte(_rVidDecOption_S, mVidDecOptionParam_X, nullptr, nullptr);
     if (Rts_E == BOF_ERR_NO_ERROR)
     {
-      if (mVidDecOption_X.NbBitPerSample_U32 == 8)
+      if (mVidDecOption_X.NbBitPerPixel_U32 == 0)
+      {
+        mVidDecOption_X.NbBitPerPixel_U32 = 32;
+      }
+      if (mVidDecOption_X.NbBitPerPixel_U32 == 8)
       {
         mPixelFmt_E = AV_PIX_FMT_BGR8;
       }
-      else if (mVidDecOption_X.NbBitPerSample_U32 == 16)
+      else if (mVidDecOption_X.NbBitPerPixel_U32 == 16)
       {
         mPixelFmt_E = AV_PIX_FMT_BGR565LE;
       }
-      else if (mVidDecOption_X.NbBitPerSample_U32 == 24)
+      else if (mVidDecOption_X.NbBitPerPixel_U32 == 24)
       {
         mPixelFmt_E = AV_PIX_FMT_BGR24;
       }
-      else
+      else if (mVidDecOption_X.NbBitPerPixel_U32 == 32)
       {
         mPixelFmt_E = AV_PIX_FMT_BGRA;
       }
-
-      for (i_U32 = 0; i_U32 < _pDecFormatCtx_X->nb_streams; i_U32++)
-      {
-        if (_pDecFormatCtx_X->streams[i_U32]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
-        {
-          mpVidDecCodecParam_X = _pDecFormatCtx_X->streams[i_U32]->codecpar;
-          break;
-        }
-      }
-      if (mpVidDecCodecParam_X == nullptr)
-      {
-        FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "No video stream", Rts_E);
-      }
       else
       {
-        mVidDecStreamIndex_i = i_U32;
-        _rAudDecStreamIndex_i = mVidDecStreamIndex_i;
-        //av_dict_set(&opts, "b", "2.5M", 0);
-        mpVidDecCodec_X = avcodec_find_decoder(mpVidDecCodecParam_X->codec_id);
-        if (mpVidDecCodec_X == nullptr)
+        Rts_E = BOF_ERR_OUT_OF_RANGE;
+      }
+      if (Rts_E == BOF_ERR_NO_ERROR)
+      {
+        for (i_U32 = 0; i_U32 < _pDecFormatCtx_X->nb_streams; i_U32++)
         {
-          FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "Could not find decoder for codec " + std::to_string(mpVidDecCodecParam_X->codec_id), Rts_E);
+          if (_pDecFormatCtx_X->streams[i_U32]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+          {
+            mpVidDecCodecParam_X = _pDecFormatCtx_X->streams[i_U32]->codecpar;
+            break;
+          }
+        }
+        if (mpVidDecCodecParam_X == nullptr)
+        {
+          FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "No video stream", Rts_E);
         }
         else
         {
-          mpVidDecCodecCtx_X = avcodec_alloc_context3(mpVidDecCodec_X);
-          if (mpVidDecCodecCtx_X == nullptr)
+          mVidDecStreamIndex_i = i_U32;
+          _rAudDecStreamIndex_i = mVidDecStreamIndex_i;
+          //av_dict_set(&opts, "b", "2.5M", 0);
+          mpVidDecCodec_X = avcodec_find_decoder(mpVidDecCodecParam_X->codec_id);
+          if (mpVidDecCodec_X == nullptr)
           {
-            FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not avcodec_alloc_context3 for codec " + std::to_string(mpVidDecCodecParam_X->codec_id), Rts_E);
+            FFMPEG_CHK_IF_ERR(AVERROR_STREAM_NOT_FOUND, "Could not find decoder for codec " + std::to_string(mpVidDecCodecParam_X->codec_id), Rts_E);
           }
           else
           {
-            Sts_i = avcodec_parameters_to_context(mpVidDecCodecCtx_X, mpVidDecCodecParam_X);
-            FFMPEG_CHK_IF_ERR(Sts_i, "Error in avcodec_parameters_to_context", Rts_E);
-            if (Rts_E == BOF_ERR_NO_ERROR)
+            mpVidDecCodecCtx_X = avcodec_alloc_context3(mpVidDecCodec_X);
+            if (mpVidDecCodecCtx_X == nullptr)
             {
-              mpVidDecCodecCtx_X->thread_count = 4;
-              Sts_i = avcodec_open2(mpVidDecCodecCtx_X, mpVidDecCodec_X, nullptr);
-              FFMPEG_CHK_IF_ERR(Sts_i, "Could not avcodec_open2", Rts_E);
+              FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not avcodec_alloc_context3 for codec " + std::to_string(mpVidDecCodecParam_X->codec_id), Rts_E);
+            }
+            else
+            {
+              Sts_i = avcodec_parameters_to_context(mpVidDecCodecCtx_X, mpVidDecCodecParam_X);
+              FFMPEG_CHK_IF_ERR(Sts_i, "Error in avcodec_parameters_to_context", Rts_E);
               if (Rts_E == BOF_ERR_NO_ERROR)
               {
-                mpVidDecFrame_X = av_frame_alloc();
-                if (mpVidDecFrame_X == nullptr)
+                mpVidDecCodecCtx_X->thread_count = mVidDecOption_X.NbThread_U32 ? mVidDecOption_X.NbThread_U32 : 1;
+                Sts_i = avcodec_open2(mpVidDecCodecCtx_X, mpVidDecCodec_X, nullptr);
+                FFMPEG_CHK_IF_ERR(Sts_i, "Could not avcodec_open2", Rts_E);
+                if (Rts_E == BOF_ERR_NO_ERROR)
                 {
-                  FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpVidDecFrame_X", Rts_E);
-                }
-                else
-                {
-                  mpVidDecFrameConverted_X = av_frame_alloc();
-                  if (mpVidDecFrameConverted_X == nullptr)
+                  mpVidDecFrame_X = av_frame_alloc();
+                  if (mpVidDecFrame_X == nullptr)
                   {
-                    FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpDestFrame_X", Rts_E);
+                    FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpVidDecFrame_X", Rts_E);
                   }
                   else
                   {
-                    mpVidDecFrameFiltered_X = av_frame_alloc();
-                    if (mpVidDecFrameFiltered_X == nullptr)
+                    mpVidDecFrameConverted_X = av_frame_alloc();
+                    if (mpVidDecFrameConverted_X == nullptr)
                     {
-                      FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpFrameFiltered_X", Rts_E);
+                      FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpDestFrame_X", Rts_E);
                     }
                     else
                     {
-                      //Allocate global video decoder buffer
-                      BufferImgSize_U32 = av_image_get_buffer_size(mPixelFmt_E, mpVidDecCodecCtx_X->width, mpVidDecCodecCtx_X->height, mVidDecAllocAlignment_i);
-                      pVidDecBuffer_U8 = (uint8_t *)av_malloc(BufferImgSize_U32);
-                      if (pVidDecBuffer_U8 == nullptr)
+                      mpVidDecFrameFiltered_X = av_frame_alloc();
+                      if (mpVidDecFrameFiltered_X == nullptr)
                       {
-                        FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_mallocz global video", Rts_E);
+                        FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_frame_alloc mpFrameFiltered_X", Rts_E);
                       }
                       else
                       {
-                        //Store global audio decoder buffer characteristics
-                        mVidDecOut_X.Data_X.SetStorage(BufferImgSize_U32, 0, pVidDecBuffer_U8);
+                        //Allocate global video decoder buffer
+  //                      BufferImgSize_U32 = av_image_get_buffer_size(mPixelFmt_E, mpVidDecCodecCtx_X->width, mpVidDecCodecCtx_X->height, mVidDecAllocAlignment_i);
+                        mImgSize_U32 = (mVidDecOption_X.NbBitPerPixel_U32 * mVidDecOption_X.Width_U32 * mVidDecOption_X.Height_U32) / 8;
+                        BufferImgSize_U32 = av_image_get_buffer_size(mPixelFmt_E, mVidDecOption_X.Width_U32, mVidDecOption_X.Height_U32, mVidDecAllocAlignment_i);
+                        BOF_ASSERT(mImgSize_U32 <= BufferImgSize_U32);
+                        pVidDecBuffer_U8 = (uint8_t *)av_malloc(BufferImgSize_U32);
+                        if (pVidDecBuffer_U8 == nullptr)
+                        {
+                          FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not av_mallocz global video", Rts_E);
+                        }
+                        else
+                        {
+                          //Store global audio decoder buffer characteristics
+                          mVidDecOut_X.Data_X.SetStorage(BufferImgSize_U32, 0, pVidDecBuffer_U8);
+                          mVidDecOut_X.Size_X.Height_U32 = mVidDecOption_X.Height_U32;
+                          mVidDecOut_X.Size_X.Width_U32 = mVidDecOption_X.Width_U32;
+                          mVidDecOut_X.LineSize_S32 = (mVidDecOption_X.NbBitPerPixel_U32 * mVidDecOption_X.Width_U32) / 8;
+                        }
                       }
                     }
                   }
@@ -186,50 +203,25 @@ BOFERR Bof2dVideoDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
         mVidDecRgbPixFmt_E = AVPixelFormat::AV_PIX_FMT_RGB24;
       }
 */
-      Sts_i = av_image_fill_arrays(mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize, mVidDecOut_X.Data_X.pData_U8, mPixelFmt_E, mVidDecOption_X.Width_U32, mVidDecOption_X.Width_U32, mVidDecAllocAlignment_i);
+      Sts_i = av_image_fill_arrays(mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize, mVidDecOut_X.Data_X.pData_U8, mPixelFmt_E, mVidDecOption_X.Width_U32, mVidDecOption_X.Height_U32, mVidDecAllocAlignment_i);
 //      Sts_i = av_image_alloc(mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize, mpVidDecCodecParam_X->width, mpVidDecCodecParam_X->height, mPixelFmt_E, mVidDecAllocAlignment_i);
       FFMPEG_CHK_IF_ERR(Sts_i, "Error in av_image_fill_arrays", Rts_E);
       if (Rts_E == BOF_ERR_NO_ERROR)
       {
+        mpVidDecFrameConverted_X->width = mVidDecOption_X.Width_U32;
+        mpVidDecFrameConverted_X->height = mVidDecOption_X.Height_U32;
+        mpVidDecFrameConverted_X->format = mPixelFmt_E;
+
         //is it the same than mpVidDecCodecParam_X->width, mpVidDecCodecParam_X->height,
         printf("Convert from %s %dx%d to %s %dx%d\n", av_get_pix_fmt_name(mpVidDecCodecCtx_X->pix_fmt), mpVidDecCodecCtx_X->width, mpVidDecCodecCtx_X->height,  
           av_get_pix_fmt_name(mPixelFmt_E), mVidDecOption_X.Width_U32, mVidDecOption_X.Height_U32);
 
-        //TODO a remplacer par sws_getContext !!!
-        // sws_getCachedContext(nullptr:  If context is NULL, just calls sws_getContext()
-#if 1
         mpVidDecSwsCtx_X = sws_getContext(mpVidDecCodecCtx_X->width, mpVidDecCodecCtx_X->height, mpVidDecCodecCtx_X->pix_fmt, 
-          mVidDecOption_X.Width_U32, mVidDecOption_X.Height_U32, mPixelFmt_E, SWS_BICUBIC, nullptr, nullptr, nullptr);
+                                          mVidDecOption_X.Width_U32, mVidDecOption_X.Height_U32, mPixelFmt_E, SWS_BICUBIC, nullptr, nullptr, nullptr);
         if (mpVidDecSwsCtx_X == nullptr)
         {
           FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not sws_getContext", Rts_E);
         }
-#else
-        mpVidDecSwsCtx_X = sws_getCachedContext(nullptr, mpVidDecCodecCtx_X->width, mpVidDecCodecCtx_X->height, mpVidDecCodecCtx_X->pix_fmt, mpVidDecCodecParam_X->width, mpVidDecCodecParam_X->height, mPixelFmt_E, SWS_BICUBIC, nullptr, nullptr, nullptr);
-
-        if (mpVidDecSwsCtx_X == nullptr)
-        {
-          FFMPEG_CHK_IF_ERR(-BOF_ERR_ENOMEM, "Could not sws_getCachedContext", Rts_E);
-        }
-        else
-        {
-          pSwsCoef_i = sws_getCoefficients(mpVidDecCodecCtx_X->colorspace);
-          Sts_i = sws_getColorspaceDetails(mpVidDecSwsCtx_X, &pInvCoef_i, &SrcRange_i, &pCoef_i, &DstRange_i, &Brightness_i, &Contrast_i, &Saturation_i);
-          FFMPEG_CHK_IF_ERR(Sts_i, "Swscale conversion not supported", Rts_E);
-          if (Rts_E == BOF_ERR_NO_ERROR)
-          {
-            // color range: (1=jpeg / 0=mpeg)
-            //  SrcRange_i = 0;
-            //  DstRange_i = 1;
-
-            Sts_i = sws_setColorspaceDetails(mpVidDecSwsCtx_X, pSwsCoef_i, SrcRange_i, pSwsCoef_i, DstRange_i, Brightness_i, Contrast_i, Saturation_i);
-            FFMPEG_CHK_IF_ERR(Sts_i, "Swscale conversion not supported", Rts_E);
-            if (Rts_E == BOF_ERR_NO_ERROR)
-            {
-            }
-          }
-        }
-#endif
       }
     }
 
@@ -320,8 +312,7 @@ BOFERR Bof2dVideoDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
                     FFMPEG_CHK_IF_ERR(Sts_i, "Could not avfilter_graph_config", Rts_E);
                     if (Rts_E == BOF_ERR_NO_ERROR)
                     {
-                      mDecoderReady_B = true;
-                      //mIsInterlaced_B = false;
+                      mVidDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
                     }
                   }
                 }
@@ -384,12 +375,11 @@ BOFERR Bof2dVideoDecoder::Close()
 
   av_freep(&mVidDecOut_X.Data_X.pData_U8);
 
-  mDecoderReady_B = false;
-  mReadBusy_B = false;
-  mReadPending_B = false;
+  mVidDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   mVidDecOption_X.Reset();
   mVidDecOut_X.Reset();
   mPixelFmt_E = AV_PIX_FMT_NONE;
+  mImgSize_U32 = 0;
 
   //mVidDecPacket_X
   mVidDecStreamIndex_i = -1;
@@ -436,16 +426,15 @@ BOFERR Bof2dVideoDecoder::BeginRead(AVPacket *_pDecPacket_X, BOF2D_VID_DEC_OUT &
   uint32_t TotalSizeOfVideoConverted_U32;
 
   _rVidDecOut_X.Reset();
-  if (IsVideoStreamPresent())
+  if (mVidDecState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
-    if (mReadBusy_B)
+    if (mVidDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
       Rts_E = BOF_ERR_EBUSY;
     }
     else
     {
-      mReadBusy_B = true;
-      Rts_E = BOF_ERR_NO_ERROR;
+      mVidDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY;
       mVidDecOut_X.Data_X.Size_U64 = 0;
 
       Rts_E = BOF_ERR_INDEX;
@@ -480,8 +469,7 @@ BOFERR Bof2dVideoDecoder::BeginRead(AVPacket *_pDecPacket_X, BOF2D_VID_DEC_OUT &
 
         if (Rts_E == BOF_ERR_EAGAIN)
         {
-          mReadBusy_B = false;
-          mReadPending_B = true;
+          mVidDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_PENDING;
           Rts_E = BOF_ERR_NO_ERROR;
         }
       }
@@ -495,19 +483,19 @@ BOFERR Bof2dVideoDecoder::EndRead()
 {
   BOFERR Rts_E = BOF_ERR_EOF;
 
-  if (IsVideoStreamPresent())
+  if (mVidDecState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
-    if (mReadBusy_B)
+    if (mVidDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
       av_frame_unref(mpVidDecFrame_X);
 
-      mReadBusy_B = false;
-      mReadPending_B = false;
+      mVidDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
       Rts_E = BOF_ERR_NO_ERROR;
     }
     else
     {
-      Rts_E = BOF_ERR_PENDING;
+//      Rts_E = (mVidDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_PENDING) ? BOF_ERR_NO_ERROR : BOF_ERR_INVALID_STATE;
+      Rts_E = BOF_ERR_NO_ERROR;
     }
   }
   return Rts_E;
@@ -525,21 +513,25 @@ BOFERR Bof2dVideoDecoder::ConvertVideo(uint32_t &_rTotalSizeOfVideoConverted_U32
   //avpicture_fill((AVPicture *)mpVidDecFrame_X, mVidDecOut_X.Data_X.pData_U8, mPixelFmt_E, mpVidDecCodecCtx_X->width, mpVidDecCodecCtx_X->height);
 //  av_image_fill_arrays(mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize, mVidDecOut_X.Data_X.pData_U8, mPixelFmt_E, mpVidDecCodecCtx_X->width, mpVidDecCodecCtx_X->height, mVidDecAllocAlignment_i);
 //Quid if upscaling:-> change mVidDecOut_X.Data_X.pData_U8 size to max...
-//£one above as constant  av_image_fill_arrays(mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize, mVidDecOut_X.Data_X.pData_U8, mPixelFmt_E, mVidDecOption_X.Width_U32, mVidDecOption_X.Width_U32, mVidDecAllocAlignment_i);
-  OutputHeight_i = sws_scale(mpVidDecSwsCtx_X, &mVidDecOut_X.Data_X.pData_U8, mpVidDecFrame_X->linesize, 0, mpVidDecFrame_X->height , mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize);
-  _rTotalSizeOfVideoConverted_U32 = OutputHeight_i * 1; //
-  mpVidDecFrame_X->width = mpVidDecCodecCtx_X->width;
-  mpVidDecFrame_X->height = mpVidDecCodecCtx_X->height;
-  mpVidDecFrameConverted_X->format = mPixelFmt_E;
+//one above as constant  av_image_fill_arrays(mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize, mVidDecOut_X.Data_X.pData_U8, mPixelFmt_E, mVidDecOption_X.Width_U32, mVidDecOption_X.Width_U32, mVidDecAllocAlignment_i);
+  OutputHeight_i = sws_scale(mpVidDecSwsCtx_X, mpVidDecFrame_X->data, mpVidDecFrame_X->linesize, 0,
+                             mpVidDecFrame_X->height , mpVidDecFrameConverted_X->data, mpVidDecFrameConverted_X->linesize);
+  _rTotalSizeOfVideoConverted_U32 = (mVidDecOption_X.NbBitPerPixel_U32 * OutputHeight_i * mVidDecOption_X.Width_U32) / 8; //
+  BOF_ASSERT(OutputHeight_i == mVidDecOption_X.Height_U32);
+//  BOF_ASSERT(_rTotalSizeOfVideoConverted_U32 == (mVidDecOption_X.NbBitPerPixel_U32 * mVidDecOption_X.Width_U32 * mVidDecOption_X.Height_U32) / 8);
+  BOF_ASSERT(_rTotalSizeOfVideoConverted_U32 == mImgSize_U32);
+  BOF_ASSERT(mpVidDecFrameConverted_X->linesize[0] == (mVidDecOption_X.NbBitPerPixel_U32 * mVidDecOption_X.Width_U32) / 8);
+  //mVidDecOption_X.Width_U32, mVidDecOption_X.Height_U32
   mpVidDecFrameConverted_X->pkt_pos = mpVidDecFrame_X->pkt_pos;
   mpVidDecFrameConverted_X->pkt_duration = mpVidDecFrame_X->pkt_duration;
   mpVidDecFrameConverted_X->pkt_size = mpVidDecFrame_X->pkt_size;
+  mVidDecOut_X.Data_X.Size_U64 = mImgSize_U32;
+
   mNbTotalVidDecFrame_U64++;
 //  mNbTotaVidDecSample_U64 += _rTotalSizeOfVideoConverted_U32;
   uint32_t *pData_U32 = (uint32_t *)mVidDecOut_X.Data_X.pData_U8;
-  printf("Cnv Video %x->%x:%p nbs %d ch %d layout %zx Fmt %d Rate %d Pos %zd Dur %zd Sz %d\n", mpVidDecFrameConverted_X->linesize[0], _rTotalSizeOfVideoConverted_U32, mVidDecOut_X.Data_X.pData_U8,
-    mpVidDecFrameConverted_X->nb_samples, mpVidDecFrameConverted_X->channels, mpVidDecFrameConverted_X->channel_layout, mpVidDecFrameConverted_X->format, mpVidDecFrameConverted_X->sample_rate,
-    mpVidDecFrameConverted_X->pkt_pos, mpVidDecFrameConverted_X->pkt_duration, mpVidDecFrameConverted_X->pkt_size);
+  printf("Cnv Video %x->%x:%p Fmt %d Pos %zd Dur %zd Sz %d\n", mpVidDecFrameConverted_X->linesize[0], _rTotalSizeOfVideoConverted_U32, mVidDecOut_X.Data_X.pData_U8,
+    mpVidDecFrameConverted_X->format, mpVidDecFrameConverted_X->pkt_pos, mpVidDecFrameConverted_X->pkt_duration, mpVidDecFrameConverted_X->pkt_size);
   printf("Cnv Data %08x %08x %08x %08x %08x %08x %08x %08x\n", pData_U32[0], pData_U32[1], pData_U32[2], pData_U32[3], pData_U32[4], pData_U32[5], pData_U32[6], pData_U32[7]);
     
     //else
@@ -554,11 +546,5 @@ BOFERR Bof2dVideoDecoder::ConvertVideo(uint32_t &_rTotalSizeOfVideoConverted_U32
 bool Bof2dVideoDecoder::IsVideoStreamPresent()
 {
   return(mVidDecStreamIndex_i != -1);
-}
-
-void Bof2dVideoDecoder::GetVideoReadFlag(bool &_rBusy_B, bool &_rPending_B)
-{
-  _rBusy_B = mReadBusy_B;
-  _rPending_B = mReadPending_B;
 }
 END_BOF2D_NAMESPACE()

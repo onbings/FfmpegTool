@@ -64,7 +64,7 @@ BOFERR Bof2dAudioEncoder::Open(const std::string &_rOption_S)
   BOF::BofCommandLineParser OptionParser;
   BOF2D_AUD_ENC_OUT AudEncOut_X;
 
-  if (mEncoderReady_B == false)
+  if (mAudEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
     Close();
 
@@ -73,6 +73,7 @@ BOFERR Bof2dAudioEncoder::Open(const std::string &_rOption_S)
     if (Rts_E == BOF_ERR_NO_ERROR)
     {
       Rts_E = BOF_ERR_INVALID_DST;
+      BOF::Bof_CreateDirectory(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mAudEncOption_X.BasePath.DirectoryName(true, false));
       if (mAudEncOption_X.BasePath.IsValid())
       {
         mIoCollection.clear();
@@ -85,7 +86,7 @@ BOFERR Bof2dAudioEncoder::Open(const std::string &_rOption_S)
         Rts_E = CreateFileOut();
         if (Rts_E == BOF_ERR_NO_ERROR)
         {
-          mEncoderReady_B = true;
+          mAudEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
         }
       }
 
@@ -104,17 +105,12 @@ BOFERR Bof2dAudioEncoder::Close()
 
   CloseFileOut();
 
-  mWriteBusy_B = false;
-  mWritePending_B = false;
-  mEncoderReady_B = false;
+  mAudEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   mAudEncOption_X.Reset();
   mIoCollection.clear();
   mAudDecOut_X.Reset();
 
-  mNbAudEncPacketSent_U64 = 0;
-  mNbAudEncFrameReceived_U64 = 0;
   mNbTotalAudEncFrame_U64 = 0;
-  mNbTotalAudEncSample_U64 = 0;
 
   Rts_E = BOF_ERR_NO_ERROR;
   return Rts_E;
@@ -125,23 +121,20 @@ BOFERR Bof2dAudioEncoder::BeginWrite(BOF2D_AUD_DEC_OUT &_rAudDecOut_X)
 {
   BOFERR Rts_E = BOF_ERR_ECANCELED;
 
-  if (mEncoderReady_B)
+  if (mAudEncState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
-    Rts_E = BOF_ERR_EOF;
-    if (mWriteBusy_B)
+    if (mAudEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
       Rts_E = BOF_ERR_EBUSY;
     }
     else
     {
-      mWriteBusy_B = true;
+      mAudEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY;
       mAudDecOut_X = _rAudDecOut_X;
       Rts_E = WriteChunkOut();
-      if (Rts_E == BOF_ERR_EAGAIN)
+      if (Rts_E == BOF_ERR_NO_ERROR)
       {
-        mWriteBusy_B = false;
-        mWritePending_B = true;
-        Rts_E = BOF_ERR_NO_ERROR;
+        mNbTotalAudEncFrame_U64++;
       }
     }
   }
@@ -152,18 +145,18 @@ BOFERR Bof2dAudioEncoder::EndWrite()
 {
   BOFERR Rts_E = BOF_ERR_ECANCELED; 
   
-  if (mEncoderReady_B)
+  if (mAudEncState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
     Rts_E = BOF_ERR_EOF;
-    if (mWriteBusy_B)
+    if (mAudEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
-      mWriteBusy_B = false;
-      mWritePending_B = false;
+      mAudEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
       Rts_E = BOF_ERR_NO_ERROR;
     }
     else
     {
-      Rts_E = BOF_ERR_PENDING;
+//      Rts_E = (mAudEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_PENDING) ? BOF_ERR_NO_ERROR : BOF_ERR_INVALID_STATE;
+      Rts_E = BOF_ERR_NO_ERROR;
     }
   }
   return Rts_E;
@@ -176,7 +169,7 @@ BOFERR Bof2dAudioEncoder::CreateFileOut()
   std::string ChannelPath_S, Extension_S = S_Bof2dAvAudioFormatEnumConverter.ToString(mAudEncOption_X.Format_E);  // (mAudEncOption_X.Format_E == BOF2D_AUDIO_FORMAT::BOF2D_AUDIO_FORMAT_WAV) ? ".wav" : ".pcm";
 
   //Entry 0 is for interleaved sample global file
-  Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mAudEncOption_X.BasePath.FullPathNameWithoutExtension(false) + '.' + Extension_S, false, mIoCollection[0].Io);
+   Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mAudEncOption_X.BasePath.FullPathNameWithoutExtension(false) + '.' + Extension_S, false, mIoCollection[0].Io);
   if (Rts_E == BOF_ERR_NO_ERROR)
   {
     for (i_U32 = 1; i_U32 < mIoCollection.size(); i_U32++) //Entry 0 is for interleaved sample global file
@@ -205,34 +198,37 @@ BOFERR Bof2dAudioEncoder::WriteHeader()
   uint32_t i_U32, Nb_U32;
   int64_t Pos_S64;
 
-  for (i_U32 = 0; i_U32 < mIoCollection.size(); i_U32++)  //Entry 0 is for interleaved sample global file
+  if (mAudEncOption_X.Format_E == BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_WAV)
   {
-    if (mIoCollection[i_U32].Io != BOF::BOF_FS_INVALID_HANDLE)
+    for (i_U32 = 0; i_U32 < mIoCollection.size(); i_U32++)  //Entry 0 is for interleaved sample global file
     {
-      Pos_S64 = BOF::Bof_GetFileIoPosition(mIoCollection[i_U32].Io);
-      if (Pos_S64 != -1)
+      if (mIoCollection[i_U32].Io != BOF::BOF_FS_INVALID_HANDLE)
       {
-        BOF::Bof_SetFileIoPosition(mIoCollection[i_U32].Io, 0, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
-        memcpy(&WavHeader_X.pRiffHeader_c, "RIFF", 4);
-        WavHeader_X.WavTotalSizeInByteMinus8_U32 = static_cast<uint32_t>(mIoCollection[i_U32].Size_U64 + sizeof(struct BOF2D_WAV_HEADER) - 8);
-        memcpy(&WavHeader_X.pWavHeader_c, "WAVE", 4);
-        memcpy(&WavHeader_X.pFmtHeader_c, "fmt ", 4);
-        WavHeader_X.FmtChunkSize_U32 = 16;  //PCM
-        WavHeader_X.AudioFormat_U16 = 1;    //PCM
-        WavHeader_X.NbChannel_U16 = (i_U32 == 0) ? static_cast<uint16_t>(mAudEncOption_X.NbChannel_U32) : 1;
-        WavHeader_X.SampleRateInHz_U32 = mAudDecOut_X.SampleRateInHz_U32;
-        WavHeader_X.SampleAlignment_U16 = (i_U32 == 0) ? static_cast<uint16_t>((mAudEncOption_X.NbChannel_U32 * mAudDecOut_X.NbBitPerSample_U32) / 8) : static_cast<uint16_t>(mAudDecOut_X.NbBitPerSample_U32 / 8);
-        WavHeader_X.NbBitPerSample_U16 = static_cast<uint16_t>(mAudDecOut_X.NbBitPerSample_U32);
-        WavHeader_X.ByteRate_U32 = mAudDecOut_X.SampleRateInHz_U32 * WavHeader_X.SampleAlignment_U16;
-        memcpy(&WavHeader_X.pDataHeader_X, "data", 4);
-        WavHeader_X.DataSizeInByte_U32 = static_cast<uint32_t>(mIoCollection[i_U32].Size_U64);
-        Nb_U32 = sizeof(struct BOF2D_WAV_HEADER);
-        Rts_E = BOF::Bof_WriteFile(mIoCollection[i_U32].Io, Nb_U32, reinterpret_cast<uint8_t *>(&WavHeader_X));
-        //NO    BOF::Bof_SetFileIoPosition(mIoCollection[i_U32], Pos_S64, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
-      }
-      else
-      {
-        Rts_E = BOF_ERR_INVALID_HANDLE;
+        Pos_S64 = BOF::Bof_GetFileIoPosition(mIoCollection[i_U32].Io);
+        if (Pos_S64 != -1)
+        {
+          BOF::Bof_SetFileIoPosition(mIoCollection[i_U32].Io, 0, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
+          memcpy(&WavHeader_X.pRiffHeader_c, "RIFF", 4);
+          WavHeader_X.WavTotalSizeInByteMinus8_U32 = static_cast<uint32_t>(mIoCollection[i_U32].Size_U64 + sizeof(struct BOF2D_WAV_HEADER) - 8);
+          memcpy(&WavHeader_X.pWavHeader_c, "WAVE", 4);
+          memcpy(&WavHeader_X.pFmtHeader_c, "fmt ", 4);
+          WavHeader_X.FmtChunkSize_U32 = 16;  //PCM
+          WavHeader_X.AudioFormat_U16 = 1;    //PCM
+          WavHeader_X.NbChannel_U16 = (i_U32 == 0) ? static_cast<uint16_t>(mAudEncOption_X.NbChannel_U32) : 1;
+          WavHeader_X.SampleRateInHz_U32 = mAudDecOut_X.SampleRateInHz_U32;
+          WavHeader_X.SampleAlignment_U16 = (i_U32 == 0) ? static_cast<uint16_t>((mAudEncOption_X.NbChannel_U32 * mAudDecOut_X.NbBitPerSample_U32) / 8) : static_cast<uint16_t>(mAudDecOut_X.NbBitPerSample_U32 / 8);
+          WavHeader_X.NbBitPerSample_U16 = static_cast<uint16_t>(mAudDecOut_X.NbBitPerSample_U32);
+          WavHeader_X.ByteRate_U32 = mAudDecOut_X.SampleRateInHz_U32 * WavHeader_X.SampleAlignment_U16;
+          memcpy(&WavHeader_X.pDataHeader_X, "data", 4);
+          WavHeader_X.DataSizeInByte_U32 = static_cast<uint32_t>(mIoCollection[i_U32].Size_U64);
+          Nb_U32 = sizeof(struct BOF2D_WAV_HEADER);
+          Rts_E = BOF::Bof_WriteFile(mIoCollection[i_U32].Io, Nb_U32, reinterpret_cast<uint8_t *>(&WavHeader_X));
+          //NO    BOF::Bof_SetFileIoPosition(mIoCollection[i_U32], Pos_S64, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
+        }
+        else
+        {
+          Rts_E = BOF_ERR_INVALID_HANDLE;
+        }
       }
     }
   }
@@ -303,14 +299,7 @@ BOFERR Bof2dAudioEncoder::CloseFileOut()
 
 bool Bof2dAudioEncoder::IsAudioStreamPresent()
 {
-  return mEncoderReady_B;
-}
-
-
-void Bof2dAudioEncoder::GetAudioWriteFlag(bool &_rBusy_B, bool &_rPending_B)
-{
-  _rBusy_B = mWriteBusy_B;
-  _rPending_B = mWritePending_B;
+  return mAudEncState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
 }
 
 END_BOF2D_NAMESPACE()

@@ -16,9 +16,6 @@
 
    V 1.00  Sep 30 2000  BHA : Initial release
  */
- //https://digital-domain.net/programming/ffmpeg-libs-audio-transcode.html
- //https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/avio_reading.c
- //https://github.com/UnickSoft/FFMpeg-decode-example/blob/master/Bof2dAudioDecoder/ffmpegDecode.cpp
 
 #pragma once
 #pragma message("!!!!!!!!!!!!! CPP => TODO REMOVE FILE LATER !!!!!!!!!!!!!")
@@ -74,6 +71,16 @@ enum class BOF2D_AV_AUDIO_FORMAT :int32_t
 };
 extern BOF::BofEnum<BOF2D_AV_AUDIO_FORMAT> S_Bof2dAvAudioFormatEnumConverter;
 
+enum class BOF2D_AV_CODEC_STATE :int32_t
+{
+  BOF2D_AV_CODEC_STATE_IDLE = 0,
+  BOF2D_AV_CODEC_STATE_READY,
+  BOF2D_AV_CODEC_STATE_BUSY,
+  BOF2D_AV_CODEC_STATE_PENDING,
+  BOF2D_AV_CODEC_STATE_MAX
+};
+extern BOF::BofEnum<BOF2D_AV_CODEC_STATE> S_Bof2dAvCodecStateEnumConverter;
+
 struct BOF2D_EXPORT BOF2D_VID_DEC_OUT
 {
   BOF::BOF_BUFFER Data_X;
@@ -92,8 +99,6 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OUT
     LineSize_S32 = 0;
   }
 };
-
-
 
 struct BOF2D_EXPORT BOF2D_AUD_DEC_OUT
 {
@@ -147,6 +152,9 @@ private:
   AVPacket mDecPacket_X;
   int mVidDecStreamIndex_i = -1;
   int mAudDecStreamIndex_i = -1;
+  int mVidEncStreamIndex_i = -1;
+  int mAudEncStreamIndex_i = -1;
+
 };
 
 END_BOF2D_NAMESPACE()

@@ -547,7 +547,7 @@ AVFrame *FFmpegDecoder::GetVideoFrame(AVFrame *pFrameYuv, enum AVPixelFormat pix
 	AVFrame *frame = NULL;
 	int width = pVideoCodecCtx->width;
 	int height = pVideoCodecCtx->height;
-	int align = 16;
+	int align = 16, OutputHeight_i;
 	//BHA int bufferImgSize = avpicture_get_size(PIX_FMT_BGR24, width, height);
 	int bufferImgSize = av_image_get_buffer_size(pix_fmt, width, height, align);
 	frame = av_frame_alloc();	//BHA avcodec_alloc_frame();
@@ -560,8 +560,7 @@ AVFrame *FFmpegDecoder::GetVideoFrame(AVFrame *pFrameYuv, enum AVPixelFormat pix
 		frame->height = height;
 		//frame->data[0] = buffer;
 
-		sws_scale(pImgConvertCtx, pFrameYuv->data, pFrameYuv->linesize,
-			0, height, frame->data, frame->linesize);
+		OutputHeight_i = sws_scale(pImgConvertCtx, pFrameYuv->data, pFrameYuv->linesize, 0, height, frame->data, frame->linesize);
 	}
 
 	return frame;

@@ -76,7 +76,6 @@ public:
   BOFERR EndWrite();
 
   bool IsVideoStreamPresent();
-  void GetVideoWriteFlag(bool &_rBusy_B, bool &_rPending_B);
 
 private:
   BOFERR CreateFileOut();
@@ -84,18 +83,13 @@ private:
   BOFERR WriteChunkOut();
   BOFERR CloseFileOut();
 
-  std::atomic<bool> mEncoderReady_B = false;
-  std::atomic<bool> mWriteBusy_B = false;
-  std::atomic<bool> mWritePending_B = false;
+  std::atomic<BOF2D_AV_CODEC_STATE> mVidEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   std::vector<BOF::BOFPARAMETER> mVidEncOptionParam_X;
   BOF2D_VID_ENC_OPTION mVidEncOption_X;
   std::vector<BOF2D_VID_ENC_OUT> mIoCollection;
   BOF2D_VID_DEC_OUT mVidDecOut_X;
 
-  uint64_t mNbVidEncPacketSent_U64 = 0;
-  uint64_t mNbVidEncFrameReceived_U64 = 0;
   uint64_t mNbTotalVidEncFrame_U64 = 0;
-  uint64_t mNbTotalVidEncSample_U64 = 0;
 
   const int  mVidEncAllocAlignment_i = 32;
 };

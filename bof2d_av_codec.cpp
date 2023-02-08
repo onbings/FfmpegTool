@@ -46,6 +46,16 @@ BOF::BofEnum<BOF2D_AV_AUDIO_FORMAT> S_Bof2dAvAudioFormatEnumConverter({
   { BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_MAX, "MAX" },
   }, BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_MAX);
 
+BOF::BofEnum<BOF2D_AV_CODEC_STATE> S_Bof2dAvCodecStateEnumConverter({
+  { BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE, "IDLE" },
+  { BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY, "READY" },
+  { BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY, "BUSY" },
+  { BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_PENDING, "PENDING" },
+  { BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_MAX, "MAX" },
+  }, BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_MAX);
+
+extern BOF::BofEnum<BOF2D_AV_CODEC_STATE> S_Bof2dAvCodecStateEnumConverter;
+
 Bof2dAvCodec::Bof2dAvCodec(int _LogLevel_i)
 {
   //AV_LOG_TRACE
@@ -89,9 +99,9 @@ BOFERR Bof2dAvCodec::OpenDecoder(const std::string &_rInputFile_S, const std::st
     FFMPEG_CHK_IF_ERR(Sts_i, "Couldn't find stream information in " + _rInputFile_S, Rts_E);
     if (Rts_E == BOF_ERR_NO_ERROR)
     {
-      StsVideo_E = mpuVideoDecoder->Open(mpDecFormatCtx_X, _rVidDecOption_S, &mVidDecStreamIndex_i);
+      StsVideo_E = mpuVideoDecoder->Open(mpDecFormatCtx_X, _rVidDecOption_S, mVidDecStreamIndex_i);
 
-      StsAudio_E = mpuAudioDecoder->Open(mpDecFormatCtx_X, _rAudDecOption_S, &mAudDecStreamIndex_i);
+      StsAudio_E = mpuAudioDecoder->Open(mpDecFormatCtx_X, _rAudDecOption_S, mAudDecStreamIndex_i);
 
       if ((StsVideo_E != BOF_ERR_NO_ERROR) && (mpuVideoDecoder->IsVideoStreamPresent()))
       {
@@ -107,39 +117,47 @@ BOFERR Bof2dAvCodec::OpenDecoder(const std::string &_rInputFile_S, const std::st
 }
 BOFERR Bof2dAvCodec::BeginRead(BOF2D_VID_DEC_OUT &_rVidDecData_X, BOF2D_AUD_DEC_OUT &_rAudDecData_X)
 {
-  BOFERR Rts_E, StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
+  BOFERR Rts_E;
   int Sts_i;
+  bool GotNewData_B;
 
-  while (Rts_E == BOF_ERR_NO_ERROR)
+  _rAudDecData_X.Reset();
+  _rVidDecData_X.Reset();
+
+  do
   {
+    GotNewData_B = false;
     Sts_i = av_read_frame(mpDecFormatCtx_X, &mDecPacket_X);
     FFMPEG_CHK_IF_ERR(Sts_i, "Cannot av_read_frame", Rts_E);
     if (Rts_E == BOF_ERR_NO_ERROR)
     {
       if (mDecPacket_X.stream_index == mAudDecStreamIndex_i)
       {
-        _rAudDecData_X.Reset();
         Rts_E = mpuAudioDecoder->BeginRead(&mDecPacket_X, _rAudDecData_X);
+        GotNewData_B = (Rts_E == BOF_ERR_NO_ERROR);
       }
       else if (mDecPacket_X.stream_index == mVidDecStreamIndex_i)
       {
-        _rVidDecData_X.Reset();
         Rts_E = mpuVideoDecoder->BeginRead(&mDecPacket_X, _rVidDecData_X);
+        GotNewData_B = (Rts_E == BOF_ERR_NO_ERROR);
       }
-      else ???
+      //else ? ? ?
+      if (GotNewData_B)
+      {
+        break;
+      }
+    }
+  } while (Rts_E == BOF_ERR_NO_ERROR);
 
-  return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E: StsVideo_E;
+  return Rts_E;
 }
 BOFERR Bof2dAvCodec::EndRead()
 {
   BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
-  bool Busy_B, Pending_B;
 
-  mpuVideoDecoder->GetVideoReadFlag(Busy_B, Pending_B);
-  StsVideo_E = (mpuVideoDecoder->IsVideoStreamPresent() && (!Pending_B)) ? mpuVideoDecoder->EndRead() : BOF_ERR_NO_ERROR;
+  StsVideo_E = mpuVideoDecoder->IsVideoStreamPresent() ? mpuVideoDecoder->EndRead() : BOF_ERR_NO_ERROR;
 
-  mpuAudioDecoder->GetAudioReadFlag(Busy_B, Pending_B);
-  StsAudio_E = (mpuAudioDecoder->IsAudioStreamPresent() && (!Pending_B)) ? mpuAudioDecoder->EndRead() : BOF_ERR_NO_ERROR;
+  StsAudio_E = mpuAudioDecoder->IsAudioStreamPresent() ? mpuAudioDecoder->EndRead() : BOF_ERR_NO_ERROR;
 
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
 }
@@ -160,42 +178,31 @@ BOFERR Bof2dAvCodec::CloseDecoder()
 BOFERR Bof2dAvCodec::OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, BOF2D_AV_VIDEO_FORMAT _VideoFormat_E, BOF2D_AV_AUDIO_FORMAT _AudioFormat_E, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S)
 {
   //_ContainerFormat_E can be none 
-  BOFERR Rts_E = BOF_ERR_NO_ERROR, StsVideo_E, StsAudio_E;
+  BOFERR StsVideo_E, StsAudio_E;
 
   StsVideo_E = mpuVideoEncoder->Open(_rVidDecOption_S);
 
   StsAudio_E = mpuAudioEncoder->Open(_rAudDecOption_S);
 
-  if (StsVideo_E != BOF_ERR_NO_ERROR)
-  {
-    Rts_E = StsVideo_E;
-  }
-  else if (StsAudio_E != BOF_ERR_NO_ERROR)
-  {
-    Rts_E = StsAudio_E;
-  }
-  return Rts_E;
+  return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
 }
 BOFERR Bof2dAvCodec::BeginWrite(BOF2D_VID_DEC_OUT &_rVidDecOut_X, BOF2D_AUD_DEC_OUT &_rAudDecOut_X)
 {
   BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
 
-  StsVideo_E = (mpuVideoEncoder->IsVideoStreamPresent() && (_rVidDecOut_X.Data_X.Size_U64)) ? mpuVideoEncoder->BeginWrite(_rVidDecOut_X) : BOF_ERR_NO_ERROR;
+  StsVideo_E = (_rVidDecOut_X.Data_X.Size_U64) ? mpuVideoEncoder->BeginWrite(_rVidDecOut_X) : BOF_ERR_NO_ERROR;
 
-  StsAudio_E = (mpuAudioEncoder->IsAudioStreamPresent() && (_rAudDecOut_X.InterleavedData_X.Size_U64)) ? mpuAudioEncoder->BeginWrite(_rAudDecOut_X) : BOF_ERR_NO_ERROR;
+  StsAudio_E = (_rAudDecOut_X.InterleavedData_X.Size_U64) ? mpuAudioEncoder->BeginWrite(_rAudDecOut_X) : BOF_ERR_NO_ERROR;
 
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
 }
 BOFERR Bof2dAvCodec::EndWrite()
 {
   BOFERR StsVideo_E = BOF_ERR_NO_ERROR, StsAudio_E = BOF_ERR_NO_ERROR;
-  bool Busy_B, Pending_B;
 
-  mpuVideoEncoder->GetVideoWriteFlag(Busy_B, Pending_B);
-  StsVideo_E = (mpuVideoEncoder->IsVideoStreamPresent() && (!Pending_B)) ? mpuVideoEncoder->EndWrite() : BOF_ERR_NO_ERROR;
+  StsVideo_E = mpuVideoEncoder->IsVideoStreamPresent() ? mpuVideoEncoder->EndWrite() : BOF_ERR_NO_ERROR;
 
-  mpuAudioEncoder->GetAudioWriteFlag(Busy_B, Pending_B);
-  StsAudio_E = (mpuAudioEncoder->IsAudioStreamPresent() && (!Pending_B)) ? mpuAudioEncoder->EndWrite() : BOF_ERR_NO_ERROR;
+  StsAudio_E = mpuAudioEncoder->IsAudioStreamPresent() ? mpuAudioEncoder->EndWrite() : BOF_ERR_NO_ERROR;
 
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
 }

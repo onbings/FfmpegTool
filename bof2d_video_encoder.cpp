@@ -67,7 +67,7 @@ BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S)
   BOF::BofCommandLineParser OptionParser;
   BOF2D_VID_ENC_OUT VidEncOut_X;
 
-  if (mEncoderReady_B == false)
+  if (mVidEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
     Close();
 
@@ -76,15 +76,17 @@ BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S)
     if (Rts_E == BOF_ERR_NO_ERROR)
     {
       Rts_E = BOF_ERR_INVALID_DST;
+      BOF::Bof_CreateDirectory(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mVidEncOption_X.BasePath.DirectoryName(true, false));
       if (mVidEncOption_X.BasePath.IsValid())
       {
         mIoCollection.clear();
         mIoCollection.push_back(VidEncOut_X);  //Entry 0 is for interleaved sample global file
 
-        Rts_E = CreateFileOut();
+        //Rts_E = CreateFileOut();
+        Rts_E = BOF_ERR_NO_ERROR;
         if (Rts_E == BOF_ERR_NO_ERROR)
         {
-          mEncoderReady_B = true;
+          mVidEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
         }
       }
 
@@ -102,19 +104,14 @@ BOFERR Bof2dVideoEncoder::Close()
 {
   BOFERR Rts_E;
 
-  CloseFileOut();
+  //CloseFileOut();
 
-  mEncoderReady_B = false;
-  mWriteBusy_B = false;
-  mWritePending_B = false;
+  mVidEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   mVidEncOption_X.Reset();
   mIoCollection.clear();
   mVidDecOut_X.Reset();
 
-  mNbVidEncPacketSent_U64 = 0;
-  mNbVidEncFrameReceived_U64 = 0;
   mNbTotalVidEncFrame_U64 = 0;
-  mNbTotalVidEncSample_U64 = 0;
 
   Rts_E = BOF_ERR_NO_ERROR;
   return Rts_E;
@@ -125,23 +122,28 @@ BOFERR Bof2dVideoEncoder::BeginWrite(BOF2D_VID_DEC_OUT &_rVidDecOut_X)
 {
   BOFERR Rts_E = BOF_ERR_ECANCELED;
 
-  if (mEncoderReady_B)
+  if (mVidEncState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
-    Rts_E = BOF_ERR_EOF;
-    if (mWriteBusy_B)
+    if (mVidEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
       Rts_E = BOF_ERR_EBUSY;
     }
     else
     {
-      mWriteBusy_B = true;
+      mVidEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY;
       mVidDecOut_X = _rVidDecOut_X;
-      Rts_E = WriteChunkOut();
-      if (Rts_E == BOF_ERR_EAGAIN)
+      Rts_E = CreateFileOut();
+      if (Rts_E == BOF_ERR_NO_ERROR)
       {
-        mWriteBusy_B = false;
-        mWritePending_B = true;
-        Rts_E = BOF_ERR_NO_ERROR;
+        Rts_E = WriteChunkOut();
+        if (Rts_E == BOF_ERR_NO_ERROR)
+        {
+          Rts_E = CloseFileOut();
+          if (Rts_E == BOF_ERR_NO_ERROR)
+          {
+            mNbTotalVidEncFrame_U64++;
+          }
+        }
       }
     }
   }
@@ -153,18 +155,18 @@ BOFERR Bof2dVideoEncoder::EndWrite()
 {
   BOFERR Rts_E = BOF_ERR_ECANCELED;
 
-  if (mEncoderReady_B)
+  if (mVidEncState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
     Rts_E = BOF_ERR_EOF;
-    if (mWriteBusy_B)
+    if (mVidEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
-      mWriteBusy_B = false;
-      mWritePending_B = false;
+      mVidEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
       Rts_E = BOF_ERR_NO_ERROR;
     }
     else
     {
-      Rts_E = BOF_ERR_PENDING;
+//      Rts_E = (mVidEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_PENDING) ? BOF_ERR_NO_ERROR : BOF_ERR_INVALID_STATE;
+      Rts_E = BOF_ERR_NO_ERROR;
     }
   }
   return Rts_E;
@@ -173,9 +175,37 @@ BOFERR Bof2dVideoEncoder::EndWrite()
 BOFERR Bof2dVideoEncoder::CreateFileOut()
 {
   BOFERR Rts_E;
-  std::string Extension_S = S_Bof2dAvVideoFormatEnumConverter.ToString(mVidEncOption_X.Format_E);
+  std::string ImagePath_S, Extension_S = S_Bof2dAvVideoFormatEnumConverter.ToString(mVidEncOption_X.Format_E);
 
-  Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mVidEncOption_X.BasePath.FullPathNameWithoutExtension(false) + '.' + Extension_S, false, mIoCollection[0].Io);
+  ImagePath_S = BOF::Bof_Sprintf("%s_%06zd.%s", mVidEncOption_X.BasePath.FullPathNameWithoutExtension(false).c_str(), mNbTotalVidEncFrame_U64, Extension_S.c_str());
+  switch (mVidEncOption_X.Format_E)
+  {
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP:
+      Rts_E = BOF::Bof_CreateFile(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, ImagePath_S, false, mIoCollection[0].Io);
+      break;
+
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_PNG:
+      Rts_E = BOF_ERR_NOT_OPENED;
+      FILE *fp = fopen(ImagePath_S.c_str(), "wb");
+      if (fp)
+      {
+      png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+      if (!png) abort();
+
+      png_infop info = png_create_info_struct(png);
+      if (!info) abort();
+
+      if (setjmp(png_jmpbuf(png))) abort();
+
+      png_init_io(png, fp);
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_TGA:
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_JPG:
+      break;
+
+    default:
+      Rts_E = BOF_ERR_FORMAT;
+      break;
+  }
   if (Rts_E == BOF_ERR_NO_ERROR)
   {
     Rts_E = WriteHeader();
@@ -190,50 +220,64 @@ BOFERR Bof2dVideoEncoder::WriteHeader()
   uint32_t i_U32, Nb_U32;
   int64_t Pos_S64;
 
-  for (i_U32 = 0; i_U32 < mIoCollection.size(); i_U32++)  //Entry 0 is for interleaved sample global file
+  switch (mVidEncOption_X.Format_E)
   {
-    if (mIoCollection[i_U32].Io != BOF::BOF_FS_INVALID_HANDLE)
-    {
-      Pos_S64 = BOF::Bof_GetFileIoPosition(mIoCollection[i_U32].Io);
-      if (Pos_S64 != -1)
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP:
+      for (i_U32 = 0; i_U32 < mIoCollection.size(); i_U32++)  //Entry 0 is for interleaved sample global file
       {
-        // RGB image
-        BOF::Bof_SetFileIoPosition(mIoCollection[i_U32].Io, 0, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
-        memcpy(&BmpHeader_X.Type_U16, "BM", 2);
-        BmpHeader_X.BmpSize_U32 = sizeof(BOF2D_BMP_HEADER) + (3 * mVidDecOut_X.Size_X.Width_U32 * mVidDecOut_X.Size_X.Height_U32);
-        BmpHeader_X.DataOffset_U32 = sizeof(BOF2D_BMP_HEADER);
-        BmpHeader_X.Reserved1_U16 = 0;
-        BmpHeader_X.Reserved2_U16 = 0;
+        if (mIoCollection[i_U32].Io != BOF::BOF_FS_INVALID_HANDLE)
+        {
+          Pos_S64 = BOF::Bof_GetFileIoPosition(mIoCollection[i_U32].Io);
+          if (Pos_S64 != -1)
+          {
+            // RGB image
+            BOF::Bof_SetFileIoPosition(mIoCollection[i_U32].Io, 0, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
+            memcpy(&BmpHeader_X.Type_U16, "BM", 2);
+            BmpHeader_X.BmpSize_U32 = sizeof(BOF2D_BMP_HEADER) + (3 * mVidDecOut_X.Size_X.Width_U32 * mVidDecOut_X.Size_X.Height_U32);
+            BmpHeader_X.DataOffset_U32 = sizeof(BOF2D_BMP_HEADER);
+            BmpHeader_X.Reserved1_U16 = 0;
+            BmpHeader_X.Reserved2_U16 = 0;
 
-        //BOF2D_BMP_INFO_HEADER &bmiHeader = *((BOF2D_BMP_INFO_HEADER *)(pData + headersSize - sizeof(BOF2D_BMP_INFO_HEADER)));
+            //BOF2D_BMP_INFO_HEADER &bmiHeader = *((BOF2D_BMP_INFO_HEADER *)(pData + headersSize - sizeof(BOF2D_BMP_INFO_HEADER)));
 
-        BmpHeader_X.Bpp_U16 = 3 * 8;
-        BmpHeader_X.Width_S32 = mVidDecOut_X.Size_X.Width_U32;
-        BmpHeader_X.Height_S32 = mVidDecOut_X.Size_X.Height_U32;
-        BmpHeader_X.NbColPlane_U16 = 1;
-        BmpHeader_X.BibSize_U32 = 40; // sizeof(bmiHeader);
-        BmpHeader_X.CompType_U32 = 0;  // BI_RGB;
-        BmpHeader_X.ColImportant_U32 = 0;
-        BmpHeader_X.NbPalCol_U32 = 0;
-        BmpHeader_X.SizeImage_U32 = 0;
-        BmpHeader_X.XPelsPerMeter_S32 = 0;
-        BmpHeader_X.YPelsPerMeter_S32 = 0;
-        Nb_U32 = sizeof(BOF2D_BMP_HEADER);
-        Rts_E = BOF::Bof_WriteFile(mIoCollection[i_U32].Io, Nb_U32, reinterpret_cast<uint8_t *>(&BmpHeader_X));
-        //NO    BOF::Bof_SetFileIoPosition(mIoCollection[0].Io, Pos_S64, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
+            BmpHeader_X.Bpp_U16 = 3 * 8;
+            BmpHeader_X.Width_S32 = mVidDecOut_X.Size_X.Width_U32;
+            BmpHeader_X.Height_S32 = mVidDecOut_X.Size_X.Height_U32;
+            BmpHeader_X.NbColPlane_U16 = 1;
+            BmpHeader_X.BibSize_U32 = 40; // sizeof(bmiHeader);
+            BmpHeader_X.CompType_U32 = 0;  // BI_RGB;
+            BmpHeader_X.ColImportant_U32 = 0;
+            BmpHeader_X.NbPalCol_U32 = 0;
+            BmpHeader_X.SizeImage_U32 = 0;
+            BmpHeader_X.XPelsPerMeter_S32 = 0;
+            BmpHeader_X.YPelsPerMeter_S32 = 0;
+            Nb_U32 = sizeof(BOF2D_BMP_HEADER);
+            Rts_E = BOF::Bof_WriteFile(mIoCollection[i_U32].Io, Nb_U32, reinterpret_cast<uint8_t *>(&BmpHeader_X));
+            //NO    BOF::Bof_SetFileIoPosition(mIoCollection[0].Io, Pos_S64, BOF::BOF_SEEK_METHOD::BOF_SEEK_BEGIN);
+          }
+          else
+          {
+            Rts_E = BOF_ERR_INVALID_HANDLE;
+          }
+        }
       }
-      else
-      {
-        Rts_E = BOF_ERR_INVALID_HANDLE;
-      }
-    }
+      break;
+
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_PNG:
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_TGA:
+    case BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_JPG:
+      break;
+
+    default:
+      Rts_E = BOF_ERR_FORMAT;
+      break;
   }
   return Rts_E;
 }
 
 BOFERR Bof2dVideoEncoder::WriteChunkOut()
 {
-  BOFERR Rts_E;
+  BOFERR Rts_E = BOF_ERR_NO_ERROR;
   uint32_t Nb_U32, i_U32;  
   int32_t Span_S32;
   uint8_t *pData_U8;
@@ -241,11 +285,9 @@ BOFERR Bof2dVideoEncoder::WriteChunkOut()
   pData_U8 = mVidDecOut_X.Data_X.pData_U8 + ((mVidDecOut_X.LineSize_S32 * mVidDecOut_X.Size_X.Height_U32) - mVidDecOut_X.LineSize_S32);
   Span_S32 = -mVidDecOut_X.LineSize_S32;
 
-  int numberOfBytesToWrite = 3 * mVidDecOut_X.Size_X.Width_U32;
-
   for (i_U32 = 0; i_U32 < mVidDecOut_X.Size_X.Height_U32; i_U32++, pData_U8 += Span_S32)
   {
-    Nb_U32 = 3 * mVidDecOut_X.Size_X.Width_U32;
+    Nb_U32 = mVidDecOut_X.LineSize_S32;
     Rts_E = BOF::Bof_WriteFile(mIoCollection[0].Io, Nb_U32, pData_U8);
     if (Rts_E == BOF_ERR_NO_ERROR)
     {
@@ -257,10 +299,10 @@ BOFERR Bof2dVideoEncoder::WriteChunkOut()
 
 BOFERR Bof2dVideoEncoder::CloseFileOut()
 {
-  BOFERR Rts_E;
+  BOFERR Rts_E = BOF_ERR_NO_ERROR;
   uint32_t i_U32;
 
-  Rts_E = WriteHeader();
+  //Rts_E = WriteHeader();
   for (i_U32 = 0; i_U32 < mIoCollection.size(); i_U32++)  //Entry 0 is for interleaved sample global file
   {
     if (mIoCollection[i_U32].Io != BOF::BOF_FS_INVALID_HANDLE)
@@ -274,12 +316,6 @@ BOFERR Bof2dVideoEncoder::CloseFileOut()
 
 bool Bof2dVideoEncoder::IsVideoStreamPresent()
 {
-  return mEncoderReady_B;
-}
-
-void Bof2dVideoEncoder::GetVideoWriteFlag(bool &_rBusy_B, bool &_rPending_B)
-{
-  _rBusy_B = mWriteBusy_B;
-  _rPending_B = mWritePending_B;
+  return mVidEncState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
 }
 END_BOF2D_NAMESPACE()

@@ -70,14 +70,11 @@ public:
   BOFERR EndRead();
 
   bool IsAudioStreamPresent();
-  void GetAudioReadFlag(bool &_rBusy_B, bool &_rPending_B);
   
 private:
   BOFERR ConvertAudio(uint32_t &_rNbAudioSampleConvertedPerChannel_U32);
 
-  std::atomic<bool> mDecoderReady_B = false;
-  std::atomic<bool> mReadBusy_B = false;
-  std::atomic<bool> mReadPending_B = false;
+  std::atomic<BOF2D_AV_CODEC_STATE> mAudDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   std::vector<BOF::BOFPARAMETER> mAudDecOptionParam_X;
   BOF2D_AUD_DEC_OPTION mAudDecOption_X;
   int mAudDecStreamIndex_i = -1;

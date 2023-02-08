@@ -29,7 +29,7 @@ extern "C"
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libswscale/swscale.h>
-#include "libavutil/imgutils.h"
+#include <libavutil/imgutils.h>
 }
 
 BEGIN_BOF2D_NAMESPACE()
@@ -38,7 +38,8 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OPTION
 {
   uint32_t Width_U32;
   uint32_t Height_U32;
-  uint32_t NbBitPerSample_U32;
+  uint32_t NbBitPerPixel_U32;
+  uint32_t NbThread_U32;
 
   BOF2D_VID_DEC_OPTION()
   {
@@ -49,7 +50,8 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OPTION
   {
     Width_U32 = 0;
     Height_U32 = 0;
-    NbBitPerSample_U32 = 0;
+    NbBitPerPixel_U32 = 0;
+    NbThread_U32 = 0;
   }
 };
 class BOF2D_EXPORT Bof2dVideoDecoder
@@ -64,21 +66,18 @@ public:
   BOFERR EndRead();
 
   bool IsVideoStreamPresent();
-  void GetVideoReadFlag(bool &_rBusy_B, bool &_rPending_B);
 
 private:
   BOFERR ConvertVideo(uint32_t &_rTotalSizeOfVideoConverted_U32);
 
-  std::atomic<bool> mDecoderReady_B = false;
-  std::atomic<bool> mReadBusy_B = false;
-  std::atomic<bool> mReadPending_B = false;
+  std::atomic<BOF2D_AV_CODEC_STATE> mVidDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   std::vector<BOF::BOFPARAMETER> mVidDecOptionParam_X;
   BOF2D_VID_DEC_OPTION mVidDecOption_X;
   int mVidDecStreamIndex_i = -1;
 
   BOF2D_VID_DEC_OUT mVidDecOut_X;
   enum AVPixelFormat mPixelFmt_E = AV_PIX_FMT_NONE;
-
+  uint32_t  mImgSize_U32 = 0;
   //std::string mOutputCodec_S;
   const AVCodecParameters *mpVidDecCodecParam_X = nullptr;
   const AVCodec *mpVidDecCodec_X = nullptr;

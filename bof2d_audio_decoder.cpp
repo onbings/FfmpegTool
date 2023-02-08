@@ -87,7 +87,7 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
   if (_pDecFormatCtx_X)
   {
     Rts_E = BOF_ERR_ALREADY_OPENED;
-    if (mDecoderReady_B == false)
+    if (mAudDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
     {
       Close();
 
@@ -254,7 +254,7 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
                             FFMPEG_CHK_IF_ERR(Sts_i, "Could not swr_init", Rts_E);
                             if (Rts_E == BOF_ERR_NO_ERROR)
                             {
-                              mDecoderReady_B = true;
+                              mAudDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
                             }
                           }
                         }
@@ -315,12 +315,9 @@ BOFERR Bof2dAudioDecoder::Close()
     BOF_SAFE_DELETE_ARRAY(rIt.pData_U8);
   }
 
-  mDecoderReady_B = false;
-  mReadBusy_B = false;
-  mReadPending_B = false;
+  mAudDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   mAudDecOption_X.Reset();
 
-  // mAudDecPacket_X;
   mAudDecStreamIndex_i = -1;
   mpAudDecCodecParam_X = nullptr;
   mpAudDecCodec_X = nullptr;
@@ -348,20 +345,21 @@ BOFERR Bof2dAudioDecoder::BeginRead(AVPacket *_pDecPacket_X, BOF2D_AUD_DEC_OUT &
   uint32_t NbAudioSampleConvertedPerChannel_U32, TotalSizeOfAudioConvertedPerChannel_U32, TotalSizeOfAudioConverted_U32, i_U32, j_U32, Index_U32;
 
   _rAudDecOut_X.Reset();
-  if (IsAudioStreamPresent())
+  if (mAudDecState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
-    if (mReadBusy_B)
+    if (mAudDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
       Rts_E = BOF_ERR_EBUSY;
     }
     else
     {
-      mReadBusy_B = true;
+      mAudDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY;
       mAudDecOut_X.InterleavedData_X.Size_U64 = 0;
       for (auto &rIt : mAudDecOut_X.ChannelBufferCollection)
       {
         rIt.Size_U64 = 0;
       }
+
       Rts_E = BOF_ERR_INDEX;
       if ((_pDecPacket_X) && (_pDecPacket_X->stream_index == mAudDecStreamIndex_i))
       {
@@ -467,8 +465,7 @@ BOFERR Bof2dAudioDecoder::BeginRead(AVPacket *_pDecPacket_X, BOF2D_AUD_DEC_OUT &
 
       if (Rts_E == BOF_ERR_EAGAIN)
       {
-        mReadBusy_B = false;
-        mReadPending_B = true;
+        mAudDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_PENDING;
         Rts_E = BOF_ERR_NO_ERROR;
       }
     }
@@ -480,19 +477,18 @@ BOFERR Bof2dAudioDecoder::EndRead()
 {
   BOFERR Rts_E = BOF_ERR_EOF;
 
-  if (IsAudioStreamPresent())
+  if (mAudDecState_E != BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
-    if (mReadBusy_B)
+    if (mAudDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_BUSY)
     {
       av_frame_unref(mpAudDecFrame_X);
-
-      mReadBusy_B = false;
-      mReadPending_B = false;
+      mAudDecState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_READY;
       Rts_E = BOF_ERR_NO_ERROR;
     }
     else
     {
-      Rts_E = BOF_ERR_PENDING;
+//      Rts_E = (mAudDecState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_PENDING) ? BOF_ERR_NO_ERROR: BOF_ERR_INVALID_STATE;
+      Rts_E = BOF_ERR_NO_ERROR;
     }
   }
   return Rts_E;
@@ -551,11 +547,4 @@ bool Bof2dAudioDecoder::IsAudioStreamPresent()
 {
   return(mAudDecStreamIndex_i != -1);
 }
-
-void Bof2dAudioDecoder::GetAudioReadFlag(bool &_rBusy_B, bool &_rPending_B)
-{
-  _rBusy_B = mReadBusy_B;
-  _rPending_B = mReadPending_B;
-}
-
 END_BOF2D_NAMESPACE()

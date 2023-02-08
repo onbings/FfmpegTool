@@ -1,4 +1,12 @@
+//https://andy-hsieh.com/thumbnail-maker-ffmpeglibav-c-qt/
+ //https://digital-domain.net/programming/ffmpeg-libs-audio-transcode.html
+ //https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/avio_reading.c
+ //https://github.com/UnickSoft/FFMpeg-decode-example/blob/master/Bof2dAudioDecoder/ffmpegDecode.cpp
+//https://github.com/UnickSoft/FFMpeg-decode-example/blob/master/ffmpegDecoder/ffmpegDecode.h
+//http://unick-soft.ru/article.php?id=14
+
 #include "bof2d_av_codec.h"
+#include "FfmpegDecoder.h"
 
 //Incompatible with Dr. Memory
 //#define _CRTDBG_MAP_ALLOC
@@ -8,6 +16,20 @@ BOFSTD_EXPORT BOFSTDPARAM GL_BofStdParam_X;
 int ExtractAudio(const char *pFnIn_c, const char *pFnOut_c);
 int main(int argc, char *argv[])
 {
+#if 0
+	FFmpegDecoder Dec;
+	bool Sts_B;
+	int Sts_i, i;
+	AVFrame *pVideo_X, *pAudio_X;
+
+	Sts_B = Dec.OpenFile("C:/tmp/sample-mp4-file-compare.mp4");
+	for (i = 0; i < 50; i++)
+	{
+		Sts_i = Dec.GetNextFrame(&pVideo_X, &pAudio_X);
+	}
+	Sts_B = Dec.CloseFile();
+#else
+
 	BOF2D::BOF2D_VID_DEC_OUT VidDecOut_X;
 	BOF2D::BOF2D_AUD_DEC_OUT AudDecOut_X;
 	uint64_t VideoFrameCounter_U64, AudioFrameCounter_U64;
@@ -22,15 +44,11 @@ int main(int argc, char *argv[])
 	uint32_t *pVideoData_U32;
 	bool EncodeData_B;
 	BOF2D::Bof2dAvCodec AvCodec;
-	//Sts_E = AvCodec.Open("C:/tmp/sample-mp4-file.mp4", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV;--A_DEMUX");
-//	Sts_E = AvCodec.Open("C:/tmp/sample-15s.mp3", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV");
-//  Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV;--A_DEMUX;--A_SPLIT");
-//	Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_FMT=WAV;--A_DEMUX");
-	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", "--V_WIDTH=160;--V_HEIGHT=120;--V_BPS=24", "--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
 	//Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
+	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", "--V_WIDTH=160;--V_HEIGHT=120;--V_BPS=24;--V_THREAD=1", "--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
 	if (Sts_E == BOF_ERR_NO_ERROR)
 	{
-		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, BOF2D::BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP, BOF2D::BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_WAV, "--V_BASEFN=C:/tmp/VideoOut;--V_FMT=BMP", "--A_BASEFN=C:/tmp/AudioOut;--A_NBCHNL=2;--A_FMT=WAV");
+		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, BOF2D::BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP, BOF2D::BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_WAV, "--V_BASEFN=C:/tmp/ffmpeg/VideoOut;--V_FMT=BMP", "--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_NBCHNL=2;--A_FMT=PCM;--A_CHUNK");
 		if (Sts_E == BOF_ERR_NO_ERROR)
 		{
 			//	Sts_E = AvCodec.Open("C:\\tmp\\sample-15s.mp3");
@@ -54,7 +72,7 @@ int main(int argc, char *argv[])
 						{
 							printf("%06zd: Got Video %zx/%zx:%p Ls %d %dx%d\n", VideoFrameCounter_U64, VidDecOut_X.Data_X.Size_U64, VidDecOut_X.Data_X.Capacity_U64, VidDecOut_X.Data_X.pData_U8,
 								VidDecOut_X.LineSize_S32, VidDecOut_X.Size_X.Width_U32, VidDecOut_X.Size_X.Height_U32);
-							printf("        Got Data %04x %04x %04x %04x %04x %04x %04x %04x\n", pVideoData_U32[0], pVideoData_U32[1], pVideoData_U32[2], pVideoData_U32[3], pVideoData_U32[4], pVideoData_U32[5], pVideoData_U32[6], pVideoData_U32[7]);
+							printf("        Got Data %08x %08x %08x %08x %08x %08x %08x %08x\n", pVideoData_U32[0], pVideoData_U32[1], pVideoData_U32[2], pVideoData_U32[3], pVideoData_U32[4], pVideoData_U32[5], pVideoData_U32[6], pVideoData_U32[7]);
 						}
 					}
 					if (AudDecOut_X.InterleavedData_X.Size_U64)
@@ -92,6 +110,7 @@ int main(int argc, char *argv[])
 		}
 		AvCodec.CloseDecoder();
 	}
+#endif
 	//_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
 	//_CrtDumpMemoryLeaks();
 	return 0;

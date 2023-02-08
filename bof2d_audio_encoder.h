@@ -75,7 +75,6 @@ public:
   BOFERR EndWrite();
 
   bool IsAudioStreamPresent();
-  void GetAudioWriteFlag(bool &_rBusy_B, bool &_rPending_B);
 
 private:
   BOFERR CreateFileOut();
@@ -83,18 +82,13 @@ private:
   BOFERR WriteChunkOut();
   BOFERR CloseFileOut();
 
-  std::atomic<bool> mEncoderReady_B = false;
-  std::atomic<bool> mWriteBusy_B = false;
-  std::atomic<bool> mWritePending_B = false;
+  std::atomic<BOF2D_AV_CODEC_STATE> mAudEncState_E = BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE;
   std::vector<BOF::BOFPARAMETER> mAudEncOptionParam_X;
   BOF2D_AUD_ENC_OPTION mAudEncOption_X;
   std::vector<BOF2D_AUD_ENC_OUT> mIoCollection;
   BOF2D_AUD_DEC_OUT mAudDecOut_X;
 
-  uint64_t mNbAudEncPacketSent_U64 = 0;
-  uint64_t mNbAudEncFrameReceived_U64 = 0;
   uint64_t mNbTotalAudEncFrame_U64 = 0;
-  uint64_t mNbTotalAudEncSample_U64 = 0;
 
   const int  mAudEncAllocAlignment_i = 32;
 };
