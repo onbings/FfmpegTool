@@ -67,6 +67,7 @@ Bof2dAudioDecoder::Bof2dAudioDecoder()
   mAudDecOptionParam_X.push_back({ nullptr, "A_RATE", "Specifies the audio sample rate to generate","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudDecOption_X.SampleRateInHz_U32, UINT32, 0, 128000) });
   mAudDecOptionParam_X.push_back({ nullptr, "A_BPS", "Specifies the number of bits per sample","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudDecOption_X.NbBitPerSample_U32, UINT32, 8, 64) });
   mAudDecOptionParam_X.push_back({ nullptr, "A_DEMUX", "If specifies, each audio channel is extracted and stored in a different memory buffer", "", "", BOF::BOFPARAMETER_ARG_FLAG::NONE, BOF_PARAM_DEF_VARIABLE(mAudDecOption_X.DemuxChannel_B, BOOL, true, 0) });
+  mAudDecOptionParam_X.push_back({ nullptr, "V_THREAD", "Specifies number of thread used by decodeer (affect delay)","","", BOF::BOFPARAMETER_ARG_FLAG::CMDLINE_LONGOPT_NEED_ARG, BOF_PARAM_DEF_VARIABLE(mAudDecOption_X.NbThread_U32, UINT32, 1, 64) });
 }
 
 Bof2dAudioDecoder::~Bof2dAudioDecoder()
@@ -82,6 +83,8 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
   uint8_t *pAudDecBuffer_U8;
   BOF::BofCommandLineParser OptionParser;
   BOF::BOF_BUFFER AudDecBuffer_X;
+  AVDictionary *pMetadata_X;
+  AVDictionaryEntry *pEntry_X;
 
   _rAudDecStreamIndex_i = -1;
   if (_pDecFormatCtx_X)
@@ -95,6 +98,22 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
       Rts_E = OptionParser.ToByte(_rVidDecOption_S, mAudDecOptionParam_X, nullptr, nullptr);
       if (Rts_E == BOF_ERR_NO_ERROR)
       {
+        if (mAudDecOption_X.NbChannel_U32 == 0)
+        {
+          mAudDecOption_X.NbChannel_U32 = 2;
+        }
+        if (mAudDecOption_X.ChannelLayout_U64 == 0)
+        {
+          mAudDecOption_X.ChannelLayout_U64 = 3;
+        }
+        if (mAudDecOption_X.SampleRateInHz_U32 == 0)
+        {
+          mAudDecOption_X.SampleRateInHz_U32 = 48000;
+        }
+        if (mAudDecOption_X.NbBitPerSample_U32 == 0)
+        {
+          mAudDecOption_X.NbBitPerSample_U32 = 16;
+        }
         if (mAudDecOption_X.NbBitPerSample_U32 == 8)
         {
           mSampleFmt_E = AV_SAMPLE_FMT_U8;
@@ -116,7 +135,8 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
         {
           if (_pDecFormatCtx_X->streams[i_U32]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
           {
-            mpAudDecCodecParam_X = _pDecFormatCtx_X->streams[i_U32]->codecpar;
+            mpAudStream_X = _pDecFormatCtx_X->streams[i_U32];
+            mpAudDecCodecParam_X = mpAudStream_X->codecpar;
             break;
           }
         }
@@ -129,6 +149,16 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
           mAudDecStreamIndex_i = i_U32;
           _rAudDecStreamIndex_i = mAudDecStreamIndex_i;
           //av_dict_set(&opts, "b", "2.5M", 0);
+          pMetadata_X = mpAudStream_X->metadata;
+          if (pMetadata_X != nullptr)
+          {
+            pEntry_X = nullptr;
+            while (pEntry_X = av_dict_get(pMetadata_X, "", pEntry_X, AV_DICT_IGNORE_SUFFIX))
+            {
+              printf("Audio Metadata %s: %s\n", pEntry_X->key, pEntry_X->value);
+              mAudMetadataCollection[pEntry_X->key] = pEntry_X->value;
+            }
+          }
           mpAudDecCodec_X = avcodec_find_decoder(mpAudDecCodecParam_X->codec_id);
           if (mpAudDecCodec_X == nullptr)
           {
@@ -147,7 +177,11 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
               FFMPEG_CHK_IF_ERR(Sts_i, "Error in avcodec_parameters_to_context", Rts_E);
               if (Rts_E == BOF_ERR_NO_ERROR)
               {
-                mpAudDecCodecCtx_X->thread_count = 4;
+                if (mAudDecOption_X.NbThread_U32 == 0)
+                {
+                  mAudDecOption_X.NbThread_U32 = 1;
+                }
+                mpAudDecCodecCtx_X->thread_count = mAudDecOption_X.NbThread_U32;
                 Sts_i = avcodec_open2(mpAudDecCodecCtx_X, mpAudDecCodec_X, nullptr);
                 FFMPEG_CHK_IF_ERR(Sts_i, "Could not avcodec_open2", Rts_E);
                 if (Rts_E == BOF_ERR_NO_ERROR)
@@ -208,7 +242,8 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
 
         if (Rts_E == BOF_ERR_NO_ERROR)
         {
-          mAudDecTimeBase_X = _pDecFormatCtx_X->streams[mAudDecStreamIndex_i]->time_base;
+          mAudDecTimeBase_X = mpAudStream_X->time_base;
+          mAudDurationInSec_lf = av_q2d(mAudDecTimeBase_X) * mpAudStream_X->duration;
 
           /* prepare resampler */
           mpAudDecSwrCtx_X = swr_alloc();
@@ -333,6 +368,10 @@ BOFERR Bof2dAudioDecoder::Close()
   mNbAudDecFrameReceived_U64 = 0;
   mNbTotalAudDecFrame_U64 = 0;
   mNbTotaAudDecSample_U64 = 0;
+
+  mAudMetadataCollection.clear();
+  mpAudStream_X = nullptr;
+  mAudDurationInSec_lf = 0.0;
 
   Rts_E = BOF_ERR_NO_ERROR;
   return Rts_E;

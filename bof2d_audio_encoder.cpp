@@ -76,6 +76,14 @@ BOFERR Bof2dAudioEncoder::Open(const std::string &_rOption_S)
       BOF::Bof_CreateDirectory(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mAudEncOption_X.BasePath.DirectoryName(true, false));
       if (mAudEncOption_X.BasePath.IsValid())
       {
+        if (mAudEncOption_X.NbChannel_U32 == 0)
+        {
+          mAudEncOption_X.NbChannel_U32 = 2;
+        }
+        if (mAudEncOption_X.Format_E == BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_MAX)
+        {
+          mAudEncOption_X.Format_E = BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_PCM;
+        }
         mIoCollection.clear();
         mIoCollection.push_back(AudEncOut_X);  //Entry 0 is for interleaved sample global file
 
@@ -237,21 +245,29 @@ BOFERR Bof2dAudioEncoder::WriteHeader()
 
 BOFERR Bof2dAudioEncoder::WriteChunkOut()
 {
-  BOFERR Rts_E, Sts_E;
+  BOFERR Rts_E = BOF_ERR_NO_ERROR, Sts_E;
   uint32_t Nb_U32, i_U32;
   intptr_t OutAudioChunkFile;
   std::string ChunkPath_S;
 
   //Entry 0 is for interleaved sample global file
-  Nb_U32 = static_cast<uint32_t>(mAudDecOut_X.InterleavedData_X.Size_U64);
-  Rts_E = BOF::Bof_WriteFile(mIoCollection[0].Io, Nb_U32, mAudDecOut_X.InterleavedData_X.pData_U8);
+  if (   (mIoCollection[0].Io != BOF::BOF_FS_INVALID_HANDLE)
+      && (mAudDecOut_X.InterleavedData_X.pData_U8) 
+      && (mAudDecOut_X.InterleavedData_X.Size_U64))
+  {
+    Nb_U32 = static_cast<uint32_t>(mAudDecOut_X.InterleavedData_X.Size_U64);
+    Rts_E = BOF::Bof_WriteFile(mIoCollection[0].Io, Nb_U32, mAudDecOut_X.InterleavedData_X.pData_U8);
+  }
   //if (Rts_E == BOF_ERR_NO_ERROR)
   {
     mIoCollection[0].Size_U64 += Nb_U32;
 
     for (i_U32 = 1; i_U32 < mIoCollection.size(); i_U32++) //Entry 0 is for interleaved sample global file
     {
-      if (mIoCollection[i_U32].Io != BOF::BOF_FS_INVALID_HANDLE)
+      if (   (mIoCollection[i_U32].Io != BOF::BOF_FS_INVALID_HANDLE)
+          && (mAudDecOut_X.ChannelBufferCollection[i_U32 - 1].pData_U8)
+          && (mAudDecOut_X.ChannelBufferCollection[i_U32 - 1].Size_U64)
+        )
       {
         Nb_U32 = static_cast<uint32_t>(mAudDecOut_X.ChannelBufferCollection[i_U32 - 1].Size_U64);
         Sts_E = BOF::Bof_WriteFile(mIoCollection[i_U32].Io, Nb_U32, mAudDecOut_X.ChannelBufferCollection[i_U32 - 1].pData_U8);

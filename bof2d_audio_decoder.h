@@ -39,10 +39,11 @@ BEGIN_BOF2D_NAMESPACE()
 struct BOF2D_EXPORT BOF2D_AUD_DEC_OPTION
 {
   bool DemuxChannel_B;
-  uint32_t NbChannel_U32;
-  uint64_t ChannelLayout_U64;
-  uint32_t SampleRateInHz_U32;
-  uint32_t NbBitPerSample_U32;
+  uint32_t NbChannel_U32; //If 0 set it to 2
+  uint64_t ChannelLayout_U64; //If 0 set it to 3
+  uint32_t SampleRateInHz_U32;  //If 0 set it to 48000
+  uint32_t NbBitPerSample_U32;  //If 0 set it to 16
+  uint32_t NbThread_U32;  //If 0 set it to 1
 
   BOF2D_AUD_DEC_OPTION()
   {
@@ -56,6 +57,7 @@ struct BOF2D_EXPORT BOF2D_AUD_DEC_OPTION
     ChannelLayout_U64 = 0;
     SampleRateInHz_U32 = 0;
     NbBitPerSample_U32 = 0;
+    NbThread_U32 = 0;
   }
 };
 class BOF2D_EXPORT Bof2dAudioDecoder
@@ -96,6 +98,9 @@ private:
   uint64_t mNbTotaAudDecSample_U64 = 0;
 
   const int  mAudDecAllocAlignment_i = 32;
+  AVStream   *mpAudStream_X = nullptr;
+  double     mAudDurationInSec_lf = 0.0;
+  std::map<std::string, std::string> mAudMetadataCollection;
 };
 
 END_BOF2D_NAMESPACE()

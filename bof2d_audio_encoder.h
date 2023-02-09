@@ -30,8 +30,8 @@ struct BOF2D_EXPORT BOF2D_AUD_ENC_OPTION
 {
   BOF::BofPath BasePath;
   bool SaveChunk_B; 
-  uint32_t NbChannel_U32;
-  BOF2D_AV_AUDIO_FORMAT Format_E;
+  uint32_t NbChannel_U32; //If 0 set to 2
+  BOF2D_AV_AUDIO_FORMAT Format_E; //If BOF2D_AV_AUDIO_FORMAT_MAX set to BOF2D_AV_AUDIO_FORMAT_PCM
 
   BOF2D_AUD_ENC_OPTION()
   {

@@ -1,9 +1,9 @@
-//https://andy-hsieh.com/thumbnail-maker-ffmpeglibav-c-qt/
  //https://digital-domain.net/programming/ffmpeg-libs-audio-transcode.html
  //https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/avio_reading.c
  //https://github.com/UnickSoft/FFMpeg-decode-example/blob/master/Bof2dAudioDecoder/ffmpegDecode.cpp
 //https://github.com/UnickSoft/FFMpeg-decode-example/blob/master/ffmpegDecoder/ffmpegDecode.h
 //http://unick-soft.ru/article.php?id=14
+//https://andy-hsieh.com/thumbnail-maker-ffmpeglibav-c-qt/
 
 #include "bof2d_av_codec.h"
 #include "FfmpegDecoder.h"
@@ -45,10 +45,18 @@ int main(int argc, char *argv[])
 	bool EncodeData_B;
 	BOF2D::Bof2dAvCodec AvCodec;
 	//Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
-	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", "--V_WIDTH=160;--V_HEIGHT=120;--V_BPS=24;--V_THREAD=1", "--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
+	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", 
+		//"--V_WIDTH=160;--V_HEIGHT=120;--V_BPS=32;--V_THREAD=1",
+		"",
+		//"--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
+		"--A_DEMUX");
 	if (Sts_E == BOF_ERR_NO_ERROR)
 	{
-		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, BOF2D::BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_BMP, BOF2D::BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_WAV, "--V_BASEFN=C:/tmp/ffmpeg/VideoOut;--V_FMT=BMP", "--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_NBCHNL=2;--A_FMT=PCM;--A_CHUNK");
+		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, 
+																//"--V_BASEFN=C:/tmp/ffmpeg/VideoOut;--V_FMT=PNG;--V_QUALITY=9",
+																"--V_BASEFN=C:/tmp/ffmpeg/VideoOut",
+																//"--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_NBCHNL=2;--A_FMT=PCM;--A_CHUNK");
+																"--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_CHUNK");
 		if (Sts_E == BOF_ERR_NO_ERROR)
 		{
 			//	Sts_E = AvCodec.Open("C:\\tmp\\sample-15s.mp3");
@@ -96,7 +104,7 @@ int main(int argc, char *argv[])
 					}
 					Sts_E = AvCodec.EndRead();
 				
-					if ((VideoFrameCounter_U64 > 512) || (AudioFrameCounter_U64 > 512))
+					if ((VideoFrameCounter_U64 > 768))	// || (AudioFrameCounter_U64 > 512))
 					{
 						break;
 					}

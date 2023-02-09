@@ -36,10 +36,10 @@ BEGIN_BOF2D_NAMESPACE()
 
 struct BOF2D_EXPORT BOF2D_VID_DEC_OPTION
 {
-  uint32_t Width_U32;
-  uint32_t Height_U32;
-  uint32_t NbBitPerPixel_U32;
-  uint32_t NbThread_U32;
+  uint32_t Width_U32; //If 0 get value from source
+  uint32_t Height_U32;  //If 0 get value from source
+  uint32_t NbBitPerPixel_U32; //If 0 set to AV_PIX_FMT_BGRA
+  uint32_t NbThread_U32;  //If 0 set to 1
 
   BOF2D_VID_DEC_OPTION()
   {
@@ -76,7 +76,7 @@ private:
   int mVidDecStreamIndex_i = -1;
 
   BOF2D_VID_DEC_OUT mVidDecOut_X;
-  enum AVPixelFormat mPixelFmt_E = AV_PIX_FMT_NONE;
+  AVPixelFormat mPixelFmt_E = AV_PIX_FMT_NONE;
   uint32_t  mImgSize_U32 = 0;
   //std::string mOutputCodec_S;
   const AVCodecParameters *mpVidDecCodecParam_X = nullptr;
@@ -113,6 +113,9 @@ private:
   AVFilterContext *mpVidDecFilterSrcCtx_X = nullptr;
 
   const int  mVidDecAllocAlignment_i = 32;
+  AVStream   *mpVidStream_X = nullptr;
+  double     mVidDurationInSec_lf = 0;
+  std::map<std::string, std::string> mVidMetadataCollection;
 };
 
 END_BOF2D_NAMESPACE()

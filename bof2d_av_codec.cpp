@@ -175,7 +175,7 @@ BOFERR Bof2dAvCodec::CloseDecoder()
   }
   return Rts_E;
 }
-BOFERR Bof2dAvCodec::OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, BOF2D_AV_VIDEO_FORMAT _VideoFormat_E, BOF2D_AV_AUDIO_FORMAT _AudioFormat_E, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S)
+BOFERR Bof2dAvCodec::OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S)
 {
   //_ContainerFormat_E can be none 
   BOFERR StsVideo_E, StsAudio_E;

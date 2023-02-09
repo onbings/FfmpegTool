@@ -86,6 +86,8 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OUT
   BOF::BOF_BUFFER Data_X;
   BOF2D::BOF_SIZE Size_X;
   int32_t LineSize_S32;
+  AVPixelFormat PixelFmt_E;
+  uint32_t NbChannel_U32; //3 RGB 4 RGBA
 
   BOF2D_VID_DEC_OUT()
   {
@@ -97,6 +99,8 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OUT
     Data_X.Reset();
     Size_X.Reset();
     LineSize_S32 = 0;
+    PixelFmt_E = AV_PIX_FMT_NONE;
+    NbChannel_U32 = 0;
   }
 };
 
@@ -135,7 +139,7 @@ public:
   virtual ~Bof2dAvCodec();
 
   BOFERR OpenDecoder(const std::string &_rInputFile_S, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S);
-  BOFERR OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, BOF2D_AV_VIDEO_FORMAT _VideoFormat_E, BOF2D_AV_AUDIO_FORMAT _AudioFormat_E, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S);
+  BOFERR OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S);
   BOFERR BeginRead(BOF2D_VID_DEC_OUT &_rVidDecOut_X, BOF2D_AUD_DEC_OUT &_rAudDecOut_X);
   BOFERR EndRead();
   BOFERR BeginWrite(BOF2D_VID_DEC_OUT &_rVidDecOut_X, BOF2D_AUD_DEC_OUT &_rAudDecOut_X);
