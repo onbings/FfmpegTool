@@ -107,7 +107,7 @@ Bof2dVideoEncoder::~Bof2dVideoEncoder()
   Close();
 }
 
-BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S)
+BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S, AVRational &_rVideoFrameRate_X)
 {
   BOFERR    Rts_E = BOF_ERR_ECANCELED;
   BOF::BofCommandLineParser OptionParser;
@@ -116,7 +116,7 @@ BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S)
   if (mVidEncState_E == BOF2D_AV_CODEC_STATE::BOF2D_AV_CODEC_STATE_IDLE)
   {
     Close();
-
+    mVideoFrameRate_X = _rVideoFrameRate_X;
     mVidEncOption_X.Reset();
     Rts_E = OptionParser.ToByte(_rOption_S, mVidEncOptionParam_X, nullptr, nullptr);
     if (Rts_E == BOF_ERR_NO_ERROR)
@@ -127,7 +127,7 @@ BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S)
       {
         if (mVidEncOption_X.Format_E == BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_MAX)
         {
-          mVidEncOption_X.Format_E = BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_PNG;
+          mVidEncOption_X.Format_E = BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_JPG;
           mVidEncOption_X.EncQuality_S32 = 9;
         }
 #if defined(BHA_BMP)
@@ -166,7 +166,7 @@ BOFERR Bof2dVideoEncoder::Close()
   mVidDecOut_X.Reset();
 
   mNbTotalVidEncFrame_U64 = 0;
-  mImagePath_S = "";
+  mVideoFrameRate_X = { 0, 0 };
 
   Rts_E = BOF_ERR_NO_ERROR;
   return Rts_E;

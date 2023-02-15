@@ -42,7 +42,7 @@ struct BOF2D_EXPORT BOF2D_AUD_DEC_OPTION
   uint32_t NbChannel_U32; //If 0 set it to 2
   uint64_t ChannelLayout_U64; //If 0 set it to 3
   uint32_t SampleRateInHz_U32;  //If 0 set it to 48000
-  uint32_t NbBitPerSample_U32;  //If 0 set it to 16
+  uint32_t NbBitPerSample_U32;  //If 0 set it to 24
   uint32_t NbThread_U32;  //If 0 set it to 1
 
   BOF2D_AUD_DEC_OPTION()

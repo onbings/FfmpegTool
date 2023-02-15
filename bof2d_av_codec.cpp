@@ -175,14 +175,20 @@ BOFERR Bof2dAvCodec::CloseDecoder()
   }
   return Rts_E;
 }
-BOFERR Bof2dAvCodec::OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, const std::string &_rVidDecOption_S, const std::string &_rAudDecOption_S)
+BOFERR Bof2dAvCodec::OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, const std::string &_rVidEncOption_S, const std::string &_rAudEncOption_S)
 {
   //_ContainerFormat_E can be none 
   BOFERR StsVideo_E, StsAudio_E;
+  AVRational FrameRate_X = { 0, 0 };
 
-  StsVideo_E = mpuVideoEncoder->Open(_rVidDecOption_S);
+  if (mpuVideoDecoder)
+  {
+    FrameRate_X = mpuVideoDecoder->GetVideoFrameRate();
+  }
 
-  StsAudio_E = mpuAudioEncoder->Open(_rAudDecOption_S);
+  StsVideo_E = mpuVideoEncoder->Open(_rVidEncOption_S, AVRational FrameRate_X);
+
+  StsAudio_E = mpuAudioEncoder->Open(_rAudEncOption_S);
 
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
 }

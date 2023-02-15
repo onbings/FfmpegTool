@@ -112,7 +112,7 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
         }
         if (mAudDecOption_X.NbBitPerSample_U32 == 0)
         {
-          mAudDecOption_X.NbBitPerSample_U32 = 16;
+          mAudDecOption_X.NbBitPerSample_U32 = 24;
         }
         if (mAudDecOption_X.NbBitPerSample_U32 == 8)
         {
@@ -177,6 +177,8 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
               FFMPEG_CHK_IF_ERR(Sts_i, "Error in avcodec_parameters_to_context", Rts_E);
               if (Rts_E == BOF_ERR_NO_ERROR)
               {
+//                mpAudDecCodecCtx_X->bits_per_raw_sample = 24;
+
                 if (mAudDecOption_X.NbThread_U32 == 0)
                 {
                   mAudDecOption_X.NbThread_U32 = 1;
@@ -278,11 +280,11 @@ BOFERR Bof2dAudioDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
                       if (Rts_E == BOF_ERR_NO_ERROR)
                       {
                         Sts_i = av_opt_set_sample_fmt(mpAudDecSwrCtx_X, "in_sample_fmt", mpAudDecCodecCtx_X->sample_fmt, 0);
-                        FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int in_sample_fmt", Rts_E);
+                        FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_sample_fmt in_sample_fmt", Rts_E);
                         if (Rts_E == BOF_ERR_NO_ERROR)
                         {
                           Sts_i = av_opt_set_sample_fmt(mpAudDecSwrCtx_X, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
-                          FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_int out_sample_fmt", Rts_E);
+                          FFMPEG_CHK_IF_ERR(Sts_i, "Could not av_opt_set_sample_fmt out_sample_fmt", Rts_E);
                           if (Rts_E == BOF_ERR_NO_ERROR)
                           {
                             Sts_i = swr_init(mpAudDecSwrCtx_X);
@@ -467,6 +469,7 @@ BOFERR Bof2dAudioDecoder::BeginRead(AVPacket *_pDecPacket_X, BOF2D_AUD_DEC_OUT &
                       break;
 
                     case 24:
+#if 0 //FFMPEG put 24 bits audio sample in S32 var
                       for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
                       {
                         for (Index_U32 = (i_U32 * 3), j_U32 = 0; j_U32 < (NbAudioSampleConvertedPerChannel_U32 * 3); j_U32++, Index_U32 += (mAudDecOption_X.NbChannel_U32 * 3))
@@ -476,6 +479,18 @@ BOFERR Bof2dAudioDecoder::BeginRead(AVPacket *_pDecPacket_X, BOF2D_AUD_DEC_OUT &
                           ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32++];
                         }
                       }
+#else
+                      for (i_U32 = 0; i_U32 < mAudDecOption_X.NbChannel_U32; i_U32++)
+                      {
+                        for (Index_U32 = (i_U32 * 3), j_U32 = 0; j_U32 < (NbAudioSampleConvertedPerChannel_U32 * 3); j_U32++, Index_U32 += (mAudDecOption_X.NbChannel_U32 * 4))
+                        {
+                          ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32];
+                          ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32++];
+                          ((uint8_t *)mAudDecOut_X.ChannelBufferCollection[i_U32].pData_U8)[j_U32++] = ((uint8_t *)mAudDecOut_X.InterleavedData_X.pData_U8)[Index_U32++];
+                        }
+                      }
+
+#endif
                       break;
 
                     case 32:

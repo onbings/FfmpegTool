@@ -44,12 +44,17 @@ int main(int argc, char *argv[])
 	uint32_t *pVideoData_U32;
 	bool EncodeData_B;
 	BOF2D::Bof2dAvCodec AvCodec;
-	//Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
+
+//First decoder before encoder !!!
+#if 0
+	Sts_E = AvCodec.OpenDecoder("C:/tmp/Sample24bit96kHz5.1.wav", "", "--A_NBCHNL=6;--A_LAYOUT=0x3F;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
+#else
 	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", 
 		//"--V_WIDTH=160;--V_HEIGHT=120;--V_BPS=32;--V_THREAD=1",
 		"",
 		//"--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
 		"--A_DEMUX");
+#endif
 	if (Sts_E == BOF_ERR_NO_ERROR)
 	{
 		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, 
@@ -104,8 +109,9 @@ int main(int argc, char *argv[])
 					}
 					Sts_E = AvCodec.EndRead();
 				
-					if ((VideoFrameCounter_U64 > 768))	// || (AudioFrameCounter_U64 > 512))
-					{
+					//if ((VideoFrameCounter_U64 > 512))	// || (AudioFrameCounter_U64 > 512))
+					if ((VideoFrameCounter_U64 > 100))	// || (AudioFrameCounter_U64 > 512))
+				  {
 						break;
 					}
 				}

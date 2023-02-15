@@ -66,6 +66,7 @@ public:
   BOFERR EndRead();
 
   bool IsVideoStreamPresent();
+  AVRational GetVideoFrameRate();
 
 private:
   BOFERR ConvertVideo(uint32_t &_rTotalSizeOfVideoConverted_U32);
@@ -96,9 +97,9 @@ private:
   // replaced by mPixelFmt_E AVPixelFormat mVidDecRgbPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
 
   bool mIsVideoInterlaced_B = false;
-  AVRational mVidDecFrameRate_X = { 0, 0 };  //or av_make_q
+//  AVRational mVidDecFrameRate_X = { 0, 0 };  //or av_make_q
   AVRational mVidDecTimeBase_X = { 0, 0 };
-  double mVidDecFramePerSecond_lf = 0.0;
+//  double mVidDecFramePerSecond_lf = 0.0;
 
   uint64_t mNbVidDecPacketSent_U64 = 0;
   uint64_t mNbVidDecFrameReceived_U64 = 0;

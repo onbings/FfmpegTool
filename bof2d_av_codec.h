@@ -88,6 +88,7 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OUT
   int32_t LineSize_S32;
   AVPixelFormat PixelFmt_E;
   uint32_t NbChannel_U32; //3 RGB 4 RGBA
+  AVRational FrameRate_X;
 
   BOF2D_VID_DEC_OUT()
   {
@@ -101,6 +102,7 @@ struct BOF2D_EXPORT BOF2D_VID_DEC_OUT
     LineSize_S32 = 0;
     PixelFmt_E = AV_PIX_FMT_NONE;
     NbChannel_U32 = 0;
+    FrameRate_X = { 0, 0 };
   }
 };
 

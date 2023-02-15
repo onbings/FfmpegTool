@@ -37,7 +37,7 @@ BEGIN_BOF2D_NAMESPACE()
 struct BOF2D_EXPORT BOF2D_VID_ENC_OPTION
 {
   BOF::BofPath BasePath;
-  BOF2D_AV_VIDEO_FORMAT Format_E;   //If BOF2D_AV_VIDEO_FORMAT_MAX set to BOF2D_AV_VIDEO_FORMAT_PNG with EncQuality_S32 = 9
+  BOF2D_AV_VIDEO_FORMAT Format_E;   //If BOF2D_AV_VIDEO_FORMAT_MAX set to BOF2D_AV_VIDEO_FORMAT_JPG with EncQuality_S32 = 90
   /*Depends on format : 
   PNG: between 0 and 9:   1 gives best speed, 9 gives best compression, 0 gives no compression at all
   TGA: 0 or 1:            0 no comp 1 Rle encoding
@@ -80,7 +80,7 @@ public:
   Bof2dVideoEncoder();
   virtual ~Bof2dVideoEncoder();
 
-  BOFERR Open(const std::string &_rOption_S);
+  BOFERR Open(const std::string &_rOption_S, AVRational &_rVideoFrameRate_X);
   BOFERR Close();
   BOFERR BeginWrite(BOF2D_VID_DEC_OUT &_rVidDecOut_X);
   BOFERR EndWrite();
@@ -105,6 +105,9 @@ private:
   uint64_t mNbTotalVidEncFrame_U64 = 0;
 
   const int  mVidEncAllocAlignment_i = 32;
+
+  AVRational mVideoFrameRate_X = { 0, 0 };
+
   std::string mImagePath_S = "";
 
 

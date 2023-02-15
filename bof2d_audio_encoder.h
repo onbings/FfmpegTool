@@ -32,6 +32,9 @@ struct BOF2D_EXPORT BOF2D_AUD_ENC_OPTION
   bool SaveChunk_B; 
   uint32_t NbChannel_U32; //If 0 set to 2
   BOF2D_AV_AUDIO_FORMAT Format_E; //If BOF2D_AV_AUDIO_FORMAT_MAX set to BOF2D_AV_AUDIO_FORMAT_PCM
+// AAC audio is stored in frames which decode to 1024 samples. So, for a 48000 Hz feed, each frame has a duration of 0.02133 seconds.
+// but with this param we extract and slice audio data in packet of 960 sample for example (48000 / 50 give 960 sample in PAL 800/801 in ntsc)
+  uint32_t NbAudioSamplePerDemuxPacket_U32; //If 0 do not slice demuxed buffer
 
   BOF2D_AUD_ENC_OPTION()
   {
@@ -44,6 +47,7 @@ struct BOF2D_EXPORT BOF2D_AUD_ENC_OPTION
     SaveChunk_B = false;
     NbChannel_U32 = 0;
     Format_E = BOF2D_AV_AUDIO_FORMAT::BOF2D_AV_AUDIO_FORMAT_MAX;
+    NbAudioSamplePerDemuxPacket_U32 = 0;
   }
 };
 
@@ -69,7 +73,7 @@ public:
   Bof2dAudioEncoder();
   virtual ~Bof2dAudioEncoder();
 
-  BOFERR Open(const std::string &_rOption_S);
+  BOFERR Open(const std::string &_rOption_S, AVRational &_rVideoFrameRate_X);
   BOFERR Close();
   BOFERR BeginWrite(BOF2D_AUD_DEC_OUT &_rAudDecOut_X);
   BOFERR EndWrite();
@@ -91,6 +95,10 @@ private:
   uint64_t mNbTotalAudEncFrame_U64 = 0;
 
   const int  mAudEncAllocAlignment_i = 32;
+
+  AVRational mVideoFrameRate_X = { 0, 0 };
+  uint32_t   mNbRemainingAudioSampleSize_U32 = 0;
+  uint8_t    mpRemainingAudioSample_U8[4096 * 4];
 };
 
 END_BOF2D_NAMESPACE()

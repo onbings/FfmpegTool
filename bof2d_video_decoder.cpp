@@ -188,6 +188,7 @@ BOFERR Bof2dVideoDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
                             mVidDecOut_X.Size_X.Width_U32 = mVidDecOption_X.Width_U32;
                             mVidDecOut_X.LineSize_S32 = (mVidDecOption_X.NbBitPerPixel_U32 * mVidDecOption_X.Width_U32) / 8;
                             mVidDecOut_X.PixelFmt_E = mPixelFmt_E;
+                            mVidDecOut_X.FrameRate_X = mpVidStream_X->avg_frame_rate;
                           }
                         }
                       }
@@ -202,9 +203,8 @@ BOFERR Bof2dVideoDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
 
       if (Rts_E == BOF_ERR_NO_ERROR)
       {
-        mVidDecFrameRate_X = mpVidStream_X->avg_frame_rate;
         mVidDecTimeBase_X = mpVidStream_X->time_base;
-        mVidDecFramePerSecond_lf = av_q2d(mpVidStream_X->r_frame_rate);
+        //mVidDecFramePerSecond_lf = av_q2d(mpVidStream_X->r_frame_rate);
         mVidDurationInSec_lf = av_q2d(mVidDecTimeBase_X) * mpVidStream_X->duration;
 
         mVidDecColorPrimaries_E = mpVidDecCodecCtx_X->color_primaries;
@@ -218,7 +218,7 @@ BOFERR Bof2dVideoDecoder::Open(AVFormatContext *_pDecFormatCtx_X, const std::str
           mVidDecVideoOutPixFmt_E = mVidDecInPixFmt_E;
         }
         */
-        mNbTotalVidDecFrame_U64 = static_cast<int64_t>(_pDecFormatCtx_X->duration / 1.0e6 * mVidDecFrameRate_X.num / mVidDecFrameRate_X.den);
+        mNbTotalVidDecFrame_U64 = static_cast<int64_t>(_pDecFormatCtx_X->duration / 1.0e6 * mVidDecOut_X.FrameRate_X.num / mVidDecOut_X.FrameRate_X.den);
         //TODO get pixel format from param
         /*
               if (mpVidDecCodecCtx_X->color_primaries == AVColorPrimaries::AVCOL_PRI_BT2020)
@@ -426,9 +426,9 @@ BOFERR Bof2dVideoDecoder::Close()
 //  mVidDecRgbPixFmt_E = AVPixelFormat::AV_PIX_FMT_NONE;
 
   mIsVideoInterlaced_B = false;
-  mVidDecFrameRate_X = { 0, 0 };  //or av_make_q
+  //mVidDecFrameRate_X = { 0, 0 };  //or av_make_q
   mVidDecTimeBase_X = { 0, 0 };
-  mVidDecFramePerSecond_lf = 0.0;
+  //mVidDecFramePerSecond_lf = 0.0;
 
   mNbVidDecPacketSent_U64 = 0;
   mNbVidDecFrameReceived_U64 = 0;
@@ -575,5 +575,10 @@ BOFERR Bof2dVideoDecoder::ConvertVideo(uint32_t &_rTotalSizeOfVideoConverted_U32
 bool Bof2dVideoDecoder::IsVideoStreamPresent()
 {
   return(mVidDecStreamIndex_i != -1);
+}
+
+AVRational Bof2dVideoDecoder::GetVideoFrameRate()
+{
+  return mVidDecOut_X.FrameRate_X;
 }
 END_BOF2D_NAMESPACE()
