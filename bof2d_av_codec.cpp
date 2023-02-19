@@ -186,9 +186,9 @@ BOFERR Bof2dAvCodec::OpenEncoder(BOF2D_AV_CONTAINER_FORMAT _ContainerFormat_E, c
     FrameRate_X = mpuVideoDecoder->GetVideoFrameRate();
   }
 
-  StsVideo_E = mpuVideoEncoder->Open(_rVidEncOption_S, AVRational FrameRate_X);
+  StsVideo_E = mpuVideoEncoder->Open(_rVidEncOption_S, FrameRate_X);
 
-  StsAudio_E = mpuAudioEncoder->Open(_rAudEncOption_S);
+  StsAudio_E = mpuAudioEncoder->Open(_rAudEncOption_S, FrameRate_X);
 
   return (StsVideo_E == BOF_ERR_NO_ERROR) ? StsAudio_E : StsVideo_E;
 }

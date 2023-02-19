@@ -88,6 +88,7 @@ private:
   AVFrame *mpAudDecFrameConverted_X = nullptr;
   BOF2D_AUD_DEC_OUT mAudDecOut_X;
   enum AVSampleFormat mSampleFmt_E = AV_SAMPLE_FMT_NONE;
+  uint32_t mAudDecNbBitPerSample_U32 = 0;
   SwrContext *mpAudDecSwrCtx_X = nullptr;
 
   AVRational mAudDecTimeBase_X = { 0, 0 };

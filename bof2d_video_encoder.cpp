@@ -125,6 +125,8 @@ BOFERR Bof2dVideoEncoder::Open(const std::string &_rOption_S, AVRational &_rVide
       BOF::Bof_CreateDirectory(BOF::BOF_FILE_PERMISSION_ALL_FOR_OWNER | BOF::BOF_FILE_PERMISSION_READ_FOR_ALL, mVidEncOption_X.BasePath.DirectoryName(true, false));
       if (mVidEncOption_X.BasePath.IsValid())
       {
+        BOF::Bof_CleanupDirectory(true, mVidEncOption_X.BasePath.DirectoryName(true, false), false);
+
         if (mVidEncOption_X.Format_E == BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_MAX)
         {
           mVidEncOption_X.Format_E = BOF2D_AV_VIDEO_FORMAT::BOF2D_AV_VIDEO_FORMAT_JPG;

@@ -52,16 +52,16 @@ int main(int argc, char *argv[])
 	Sts_E = AvCodec.OpenDecoder("C:/tmp/sample-mp4-file.mp4", 
 		//"--V_WIDTH=160;--V_HEIGHT=120;--V_BPS=32;--V_THREAD=1",
 		"",
-		//"--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=16;--A_DEMUX");
-		"--A_DEMUX");
+		"--A_NBCHNL=2;--A_LAYOUT=3;--A_RATE=48000;--A_BPS=24;--A_DEMUX");
+		//"--A_DEMUX");
 #endif
 	if (Sts_E == BOF_ERR_NO_ERROR)
 	{
-		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE, 
-																//"--V_BASEFN=C:/tmp/ffmpeg/VideoOut;--V_FMT=PNG;--V_QUALITY=9",
-																"--V_BASEFN=C:/tmp/ffmpeg/VideoOut",
-																//"--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_NBCHNL=2;--A_FMT=PCM;--A_CHUNK");
-																"--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_CHUNK");
+		Sts_E = AvCodec.OpenEncoder(BOF2D::BOF2D_AV_CONTAINER_FORMAT::BOF2D_AV_CONTAINER_FORMAT_NONE,
+			//"--V_BASEFN=C:/tmp/ffmpeg/VideoOut;--V_FMT=PNG;--V_QUALITY=9",
+			"--V_BASEFN=C:/tmp/ffmpeg/VideoOut",
+			//"--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_NBCHNL=2;--A_FMT=PCM;--A_CHUNK");
+			"--A_BASEFN=C:/tmp/ffmpeg/AudioOut;--A_NBCHNL=1;--A_CHUNKSIZE= 801, 801, 801, 801, 800");		//960
 		if (Sts_E == BOF_ERR_NO_ERROR)
 		{
 			//	Sts_E = AvCodec.Open("C:\\tmp\\sample-15s.mp3");
